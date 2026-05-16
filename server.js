@@ -11,25 +11,28 @@ const PORT = process.env.PORT || 3000;
 
 const KW_RECHERCHE = [
   "sablage", "grenaillage", "traitement de surface", "peinture industrielle",
-  "anticorrosion", "époxy", "polyuréthane", "métallisation", "thermolaquage",
-  "remise en peinture", "garde-corps", "candélabre", "lampadaire",
-  "mobilier urbain", "barrière métallique", "serrurerie métallique",
-  "portail acier", "charpente métallique", "passerelle acier",
-  "ouvrages métalliques", "zinc silicate", "protection anticorrosion"
+  "anticorrosion", "epoxy", "polyurethane", "metallisation", "thermolaquage",
+  "remise en peinture", "garde-corps", "candelabre", "lampadaire",
+  "mobilier urbain", "barriere metallique", "serrurerie metallique",
+  "portail acier", "charpente metallique", "passerelle acier",
+  "ouvrages metalliques", "zinc silicate", "protection anticorrosion",
+  "peinture acier", "traitement anticorrosion"
 ];
 
 const KW_ATELIER = [
-  "déposées", "démontées", "transportées", "en atelier", "avant pose",
-  "en usine", "lot peinture", "pièces déposées", "avant repose",
-  "traitement en série", "livraison atelier", "avant installation"
+  "deposees", "demontees", "transportees", "en atelier", "avant pose",
+  "en usine", "lot peinture", "pieces deposees", "avant repose",
+  "traitement en serie", "livraison atelier", "avant installation",
+  "atelier", "usine"
 ];
 
 const KW_EXCLUS = [
-  "ravalement", "façade", "enduit", "peinture intérieure", "nacelle",
-  "échafaudage", "maintien circulation", "nuit", "autoroutier",
-  "génie civil", "terrassement", "VRD", "toiture", "couverture"
+  "ravalement", "facade", "enduit", "peinture interieure",
+  "maintien circulation", "autoroute", "genie civil",
+  "terrassement", "VRD", "toiture", "couverture", "batiment"
 ];
 
+// Distances depuis Marne (51) en km
 const DIST51 = {
   "02":90,"03":290,"04":500,"05":510,"06":620,"07":430,"08":130,"09":650,
   "10":80,"11":620,"12":430,"13":570,"14":380,"15":350,"16":480,"17":510,
@@ -50,41 +53,50 @@ function nrm(s) {
 }
 
 function estDist(dept, refDept = "51") {
-  if (!dept) return 300;
-  if (dept === refDept) return 15;
-  return DIST51[dept] || 250;
+  if (!dept) return 400;
+  const d = dept.toString().padStart(2, '0');
+  if (d === refDept) return 15;
+  return DIST51[d] || 350;
 }
 
 function calculScore(m) {
   let s = 0, det = [];
   const tx = nrm([m.titre, m.description, m.acheteur].join(" "));
 
+  // Distance (max 25 pts)
   const d = m.distance || 999;
-  let dp = d<50?18:d<100?14:d<200?10:d<300?5:1;
-  det.push({l: `Distance (${d} km)`, p: dp, mx: 18}); s += dp;
+  let dp = d<50?25:d<100?20:d<200?14:d<300?8:d<400?4:1;
+  det.push({l: `Distance (${d} km)`, p: dp, mx: 25}); s += dp;
 
+  // Compatible atelier (max 20 pts)
   let ap = 0;
-  for (const k of KW_ATELIER) { if (tx.includes(nrm(k))) { ap = 22; break; } }
-  if (!ap) ap = 5;
-  det.push({l: "Compatible atelier", p: ap, mx: 22}); s += ap;
+  for (const k of KW_ATELIER) { if (tx.includes(nrm(k))) { ap = 20; break; } }
+  if (!ap) ap = 8; // neutre par défaut
+  det.push({l: "Compatible atelier", p: ap, mx: 20}); s += ap;
 
+  // Correspondance métier (max 30 pts)
   let kc = 0;
   for (const k of KW_RECHERCHE) { if (tx.includes(nrm(k))) kc++; }
-  let kp = Math.min(20, kc * 4);
-  det.push({l: "Correspondance métier", p: kp, mx: 20}); s += kp;
+  let kp = Math.min(30, kc * 5);
+  det.push({l: "Correspondance métier", p: kp, mx: 30}); s += kp;
 
+  // Délai raisonnable (max 15 pts)
   const dl = m.daysLeft || 0;
-  let tp = dl>20?15:dl>10?10:dl>5?5:0;
+  let tp = dl>20?15:dl>10?10:dl>5?5:dl>0?2:0;
   det.push({l: "Temps pour répondre", p: tp, mx: 15}); s += tp;
 
+  // Pénalité mots exclus
+  let penalite = 0;
   for (const k of KW_EXCLUS) {
-    if (tx.includes(nrm(k))) { s = Math.max(0, s - 25); break; }
+    if (tx.includes(nrm(k))) { penalite = 20; break; }
   }
+  if (penalite) det.push({l: "⚠️ Hors métier", p: -penalite, mx: 0});
+  s = Math.max(0, s - penalite);
 
   return { total: Math.min(100, Math.round(s)), det };
 }
 
-function couleur(sc) { return sc>=60?"vert":sc>=38?"orange":"rouge"; }
+function couleur(sc) { return sc>=50?"vert":sc>=30?"orange":"rouge"; }
 
 function typeAtelier(tx) {
   const t = nrm(tx);
@@ -94,8 +106,8 @@ function typeAtelier(tx) {
 }
 
 async function fetchBOAMP(query) {
-  const words = query.split(' ').map(w => `search(objet,"${w}")`).join(' OR ');
-  const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?where=${encodeURIComponent(words)}&limit=20&order_by=dateparution%20desc`;
+  const words = query.split(' ').filter(w => w.length > 3).map(w => `search(objet,"${w}")`).join(' OR ');
+  const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?where=${encodeURIComponent(words)}&limit=25&order_by=dateparution%20desc`;
   try {
     const res = await fetch(url, {
       headers: {
@@ -109,34 +121,41 @@ async function fetchBOAMP(query) {
       return [];
     }
     const data = await res.json();
-    const records = data?.results || data?.records || [];
+    const records = data?.results || [];
+
+    // Log les champs du premier résultat pour debug
+    if (records.length > 0) {
+      console.log("Champs disponibles:", Object.keys(records[0]).join(", "));
+    }
+
     return records.map(r => {
-      const f = r.fields || r;
-      const cpVille = f.cp_acheteur || f.lieu_exec_code_postal || "";
+      // L'API v2.1 retourne les champs directement (pas dans r.fields)
+      const idweb = r.idweb || r.id_web || r.numero_avis || "";
+      const cpVille = r.lieu_exec_code_postal || r.cp_acheteur || r.lieu_exec_cp || "";
       const dept = cpVille.toString().replace(/[^0-9]/g, "").substring(0, 2) || "";
-      const dateLimit = f.date_limite_reponse || f.datelimitereponse || "";
-      const datePub = f.dateparution || f.date_parution || "";
+      const dateLimit = r.date_limite_reponse || r.datelimitereponse || r.date_limite || "";
+      const datePub = r.dateparution || r.date_parution || "";
       const daysLeft = dateLimit
         ? Math.round((new Date(dateLimit) - Date.now()) / 86400000)
         : null;
-      const id = r.id || f.idweb || f.reference || Math.random().toString(36);
+      const uid = idweb || (r.id || Math.random().toString(36).substring(2));
+      const urlDirecte = idweb
+        ? `https://www.boamp.fr/avis/detail/${idweb}`
+        : "https://www.boamp.fr";
+
       return {
-        id,
-        reference: f.reference || f.idweb || "",
-        titre: f.objet || f.intitule || "Marché sans titre",
-        description: [
-          f.objet || "",
-          f.descriptif || "",
-          f.libelle_nature || ""
-        ].join(" "),
-        acheteur: f.nom_acheteur || f.intitule_acheteur || "Acheteur public",
-        ville: f.lieu_exec_localite || f.ville_acheteur || cpVille || "",
+        id: uid,
+        reference: idweb || r.reference || "",
+        titre: r.objet || r.intitule || r.libelle || "Marché sans titre",
+        description: [r.objet || "", r.descriptif || "", r.libelle_nature || ""].join(" "),
+        acheteur: r.nom_acheteur || r.acheteur || r.intitule_acheteur || "Acheteur public",
+        ville: r.lieu_exec_localite || r.commune || r.ville || cpVille || "",
         dept,
-        montant: parseFloat(f.montant_estime) || null,
+        montant: parseFloat(r.montant_estime || r.montant || 0) || null,
         datePublication: datePub,
         dateLimit,
         daysLeft,
-        urlDirecte: f.url || `https://www.boamp.fr/avis/detail/${id}`,
+        urlDirecte,
         source: "BOAMP"
       };
     });
@@ -148,28 +167,28 @@ async function fetchBOAMP(query) {
 
 app.get('/api/marches', async (req, res) => {
   const dept = req.query.dept || "51";
-  console.log(`Recherche lancée — dept référence: ${dept}`);
+  const tri = req.query.tri || "distance"; // distance, score, date
+  console.log(`Recherche lancée — dept: ${dept}, tri: ${tri}`);
 
   const queries = [
-    "sablage traitement surface",
-    "peinture industrielle métallique",
-    "anticorrosion acier",
-    "garde-corps peinture",
-    "mobilier urbain traitement acier",
-    "candélabre peinture anticorrosion",
-    "serrurerie peinture acier",
-    "grenaillage métallisation",
-    "thermolaquage acier",
-    "charpente métallique peinture"
+    "sablage grenaillage surface",
+    "peinture industrielle metallique acier",
+    "anticorrosion epoxy polyurethane",
+    "garde-corps candélabre lampadaire",
+    "mobilier urbain traitement surface",
+    "serrurerie portail acier peinture",
+    "thermolaquage metallisation zinc",
+    "charpente passerelle acier peinture"
   ];
 
   let tous = [];
   for (const q of queries) {
     const res2 = await fetchBOAMP(q);
     tous.push(...res2);
-    await new Promise(r => setTimeout(r, 200));
+    await new Promise(r => setTimeout(r, 250));
   }
 
+  // Dédupliquer
   const seen = new Set();
   tous = tous.filter(m => {
     if (seen.has(m.id)) return false;
@@ -177,8 +196,10 @@ app.get('/api/marches', async (req, res) => {
     return true;
   });
 
+  // Garder annonces valides
   tous = tous.filter(m => m.daysLeft === null || m.daysLeft > 0);
 
+  // Enrichir
   tous = tous.map(m => {
     m.distance = estDist(m.dept, dept);
     const sc = calculScore(m);
@@ -189,21 +210,26 @@ app.get('/api/marches', async (req, res) => {
     return m;
   });
 
-  tous.sort((a, b) => {
-    if (a.datePublication && b.datePublication) {
-      return new Date(b.datePublication) - new Date(a.datePublication);
-    }
-    return b.score - a.score;
-  });
+  // Tri
+  if (tri === "distance") {
+    tous.sort((a, b) => a.distance - b.distance);
+  } else if (tri === "score") {
+    tous.sort((a, b) => b.score - a.score);
+  } else {
+    tous.sort((a, b) => {
+      if (a.datePublication && b.datePublication)
+        return new Date(b.datePublication) - new Date(a.datePublication);
+      return b.score - a.score;
+    });
+  }
 
-  console.log(`Résultats: ${tous.length} annonces valides trouvées`);
+  console.log(`Résultats: ${tous.length} annonces valides`);
   res.json({ success: true, total: tous.length, marches: tous });
 });
 
 app.post('/api/analyser', async (req, res) => {
   const { marche } = req.body;
   const apiKey = process.env.ANTHROPIC_API_KEY;
-
   if (!apiKey) return res.status(500).json({ error: "Clé API non configurée" });
   if (!marche) return res.status(400).json({ error: "Données manquantes" });
 
@@ -213,7 +239,7 @@ app.post('/api/analyser', async (req, res) => {
 
   const prompt = `Tu es expert marchés publics français, spécialiste traitement de surface industriel.
 
-Analyse ce marché public pour CTS Hervé (sablage, grenaillage, peinture industrielle, anticorrosion) situé dans la Marne (51).
+Analyse ce marché pour CTS Hervé (sablage, grenaillage, peinture industrielle, anticorrosion) situé dans la Marne (51).
 
 RÉFÉRENCE : ${marche.reference || "Non précisée"}
 MARCHÉ : ${marche.titre}
@@ -244,12 +270,11 @@ Analyse en 5 points courts :
         messages: [{ role: "user", content: prompt }]
       })
     });
-
     const data = await response.json();
     const texte = data.content?.map(b => b.text || "").join("\n").trim() || "";
     res.json({ success: true, resume: texte });
   } catch (e) {
-    res.status(500).json({ error: "Erreur serveur: " + e.message });
+    res.status(500).json({ error: "Erreur: " + e.message });
   }
 });
 
