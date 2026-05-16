@@ -94,8 +94,8 @@ function typeAtelier(tx) {
 }
 
 async function fetchBOAMP(query) {
-  // Nouvelle URL API BOAMP OpenDataSoft
-  const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?where=${encodeURIComponent(query)}&limit=20&order_by=dateparution%20desc`;
+  const words = query.split(' ').map(w => `search(objet,"${w}")`).join(' OR ');
+  const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?where=${encodeURIComponent(words)}&limit=20&order_by=dateparution%20desc`;
   try {
     const res = await fetch(url, {
       headers: {
