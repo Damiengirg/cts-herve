@@ -6,11 +6,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
+
 const PORT = process.env.PORT || 3000;
 
-// ══════════════════════════════════════
-//  MOTS-CLÉS MÉTIER
-// ══════════════════════════════════════
 const KW_RECHERCHE = [
   "sablage", "grenaillage", "traitement de surface", "peinture industrielle",
   "anticorrosion", "époxy", "polyuréthane", "métallisation", "thermolaquage",
@@ -32,7 +30,6 @@ const KW_EXCLUS = [
   "génie civil", "terrassement", "VRD", "toiture", "couverture"
 ];
 
-// Distances réelles depuis Marne (51) en km
 const DIST51 = {
   "02":90,"03":290,"04":500,"05":510,"06":620,"07":430,"08":130,"09":650,
   "10":80,"11":620,"12":430,"13":570,"14":380,"15":350,"16":480,"17":510,
@@ -62,29 +59,24 @@ function calculScore(m) {
   let s = 0, det = [];
   const tx = nrm([m.titre, m.description, m.acheteur].join(" "));
 
-  // Distance
   const d = m.distance || 999;
   let dp = d<50?18:d<100?14:d<200?10:d<300?5:1;
   det.push({l: `Distance (${d} km)`, p: dp, mx: 18}); s += dp;
 
-  // Compatible atelier
   let ap = 0;
   for (const k of KW_ATELIER) { if (tx.includes(nrm(k))) { ap = 22; break; } }
   if (!ap) ap = 5;
   det.push({l: "Compatible atelier", p: ap, mx: 22}); s += ap;
 
-  // Correspondance métier
   let kc = 0;
   for (const k of KW_RECHERCHE) { if (tx.includes(nrm(k))) kc++; }
   let kp = Math.min(20, kc * 4);
   det.push({l: "Correspondance métier", p: kp, mx: 20}); s += kp;
 
-  // Délai raisonnable
   const dl = m.daysLeft || 0;
   let tp = dl>20?15:dl>10?10:dl>5?5:0;
   det.push({l: "Temps pour répondre", p: tp, mx: 15}); s += tp;
 
-  // Pénalité mots exclus
   for (const k of KW_EXCLUS) {
     if (tx.includes(nrm(k))) { s = Math.max(0, s - 25); break; }
   }
@@ -101,53 +93,50 @@ function typeAtelier(tx) {
   return "? À vérifier";
 }
 
-// ══════════════════════════════════════
-//  FETCH BOAMP OFFICIEL
-// ══════════════════════════════════════
 async function fetchBOAMP(query) {
-  const url = `https://www.boamp.fr/avis/search?q=${encodeURIComponent(query)}&rows=15&sort=dateparution+desc`;
+  // Nouvelle URL API BOAMP OpenDataSoft
+  const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?where=${encodeURIComponent(query)}&limit=20&order_by=dateparution%20desc`;
   try {
     const res = await fetch(url, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (compatible; CTS-Marches/1.0)',
         'Accept': 'application/json'
       },
-      timeout: 15000
+      signal: AbortSignal.timeout(15000)
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      console.error(`BOAMP error ${res.status} for query: ${query}`);
+      return [];
+    }
     const data = await res.json();
-    return (data?.hits?.hits || []).map(h => {
-      const s = h._source || {};
-      const cpVille = s.acheteur?.cp_ville || "";
-      const dept = cpVille.replace(/[^0-9]/g, "").substring(0, 2) || "";
-      const dateLimit = s.date_limite_reponse || "";
-      const datePub = s.dateparution || s.date_parution || "";
+    const records = data?.results || data?.records || [];
+    return records.map(r => {
+      const f = r.fields || r;
+      const cpVille = f.cp_acheteur || f.lieu_exec_code_postal || "";
+      const dept = cpVille.toString().replace(/[^0-9]/g, "").substring(0, 2) || "";
+      const dateLimit = f.date_limite_reponse || f.datelimitereponse || "";
+      const datePub = f.dateparution || f.date_parution || "";
       const daysLeft = dateLimit
         ? Math.round((new Date(dateLimit) - Date.now()) / 86400000)
         : null;
-
-      // Référence du contrat
-      const reference = s.reference_marche || s.numero_consultation ||
-        s.numero_avis || h._id || "";
-
+      const id = r.id || f.idweb || f.reference || Math.random().toString(36);
       return {
-        id: h._id,
-        reference: reference,
-        titre: s.objet || s.intitule_marche || "Marché sans titre",
+        id,
+        reference: f.reference || f.idweb || "",
+        titre: f.objet || f.intitule || "Marché sans titre",
         description: [
-          (s.descripteurs_libelles || []).join(" "),
-          s.objet || "",
-          s.description_cpv || "",
-          s.description || ""
+          f.objet || "",
+          f.descriptif || "",
+          f.libelle_nature || ""
         ].join(" "),
-        acheteur: s.acheteur?.nom || "Acheteur public",
-        ville: s.lieu_principal_execution?.localite || cpVille || "",
+        acheteur: f.nom_acheteur || f.intitule_acheteur || "Acheteur public",
+        ville: f.lieu_exec_localite || f.ville_acheteur || cpVille || "",
         dept,
-        montant: parseFloat(s.montant_estime) || null,
+        montant: parseFloat(f.montant_estime) || null,
         datePublication: datePub,
         dateLimit,
         daysLeft,
-        urlDirecte: `https://www.boamp.fr/avis/detail/${h._id}`,
+        urlDirecte: f.url || `https://www.boamp.fr/avis/detail/${id}`,
         source: "BOAMP"
       };
     });
@@ -157,9 +146,6 @@ async function fetchBOAMP(query) {
   }
 }
 
-// ══════════════════════════════════════
-//  ROUTE PRINCIPALE — RECHERCHE
-// ══════════════════════════════════════
 app.get('/api/marches', async (req, res) => {
   const dept = req.query.dept || "51";
   console.log(`Recherche lancée — dept référence: ${dept}`);
@@ -172,19 +158,18 @@ app.get('/api/marches', async (req, res) => {
     "mobilier urbain traitement acier",
     "candélabre peinture anticorrosion",
     "serrurerie peinture acier",
-    "portail clôture traitement surface",
     "grenaillage métallisation",
-    "thermolaquage acier"
+    "thermolaquage acier",
+    "charpente métallique peinture"
   ];
 
   let tous = [];
   for (const q of queries) {
     const res2 = await fetchBOAMP(q);
     tous.push(...res2);
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 200));
   }
 
-  // Dédupliquer
   const seen = new Set();
   tous = tous.filter(m => {
     if (seen.has(m.id)) return false;
@@ -192,10 +177,8 @@ app.get('/api/marches', async (req, res) => {
     return true;
   });
 
-  // Garder uniquement les annonces encore valides
   tous = tous.filter(m => m.daysLeft === null || m.daysLeft > 0);
 
-  // Enrichir avec distance et score
   tous = tous.map(m => {
     m.distance = estDist(m.dept, dept);
     const sc = calculScore(m);
@@ -206,7 +189,6 @@ app.get('/api/marches', async (req, res) => {
     return m;
   });
 
-  // Trier par date de publication (plus récent en premier)
   tous.sort((a, b) => {
     if (a.datePublication && b.datePublication) {
       return new Date(b.datePublication) - new Date(a.datePublication);
@@ -218,46 +200,35 @@ app.get('/api/marches', async (req, res) => {
   res.json({ success: true, total: tous.length, marches: tous });
 });
 
-// ══════════════════════════════════════
-//  ROUTE IA — RÉSUMÉ (payant au clic)
-// ══════════════════════════════════════
 app.post('/api/analyser', async (req, res) => {
   const { marche } = req.body;
   const apiKey = process.env.ANTHROPIC_API_KEY;
 
-  if (!apiKey) {
-    return res.status(500).json({ error: "Clé API non configurée" });
-  }
-
-  if (!marche) {
-    return res.status(400).json({ error: "Données manquantes" });
-  }
+  if (!apiKey) return res.status(500).json({ error: "Clé API non configurée" });
+  if (!marche) return res.status(400).json({ error: "Données manquantes" });
 
   const montantTxt = marche.montant
     ? marche.montant.toLocaleString('fr-FR') + " €"
-    : "Prix non communiqué — prévoir de demander un devis ou estimer selon les quantités";
+    : "Prix non communiqué";
 
   const prompt = `Tu es expert marchés publics français, spécialiste traitement de surface industriel.
 
-Analyse ce marché public pour un chef d'entreprise de traitement de surface (sablage, grenaillage, peinture industrielle, anticorrosion, métallisation, thermolaquage) situé dans la Marne (51).
+Analyse ce marché public pour CTS Hervé (sablage, grenaillage, peinture industrielle, anticorrosion) situé dans la Marne (51).
 
 RÉFÉRENCE : ${marche.reference || "Non précisée"}
 MARCHÉ : ${marche.titre}
 ACHETEUR : ${marche.acheteur}
-LIEU : ${marche.ville} (${marche.dept}) — ${marche.distance} km de l'atelier
+LIEU : ${marche.ville} (${marche.dept}) — ${marche.distance} km
 MONTANT : ${montantTxt}
-DÉLAI RÉPONSE : ${marche.daysLeft ? marche.daysLeft + " jours" : "Non précisé"}
-DESCRIPTION COMPLÈTE : ${marche.description.slice(0, 600)}
+DÉLAI : ${marche.daysLeft ? marche.daysLeft + " jours" : "Non précisé"}
+DESCRIPTION : ${marche.description.slice(0, 600)}
 
-Donne une analyse en 5 points COURTS, HONNÊTES et UTILES :
-
-1. 🔧 TRAVAUX DEMANDÉS : (type exact : sablage SA2,5 / primaire époxy / peinture polyuréthane / métallisation / thermolaquage — précis)
-2. 📦 TYPE DE PIÈCES : (garde-corps / candélabres / barrières / charpente — nombre et poids estimés si mentionnés, sinon "non précisé dans l'annonce")
-3. 💰 PRIX : (montant si connu, sinon "Prix non communiqué — prévoir devis")
-4. 🏭 COMPATIBLE ATELIER : Oui / Non / Incertain — (raison courte et directe)
-5. ✅ VERDICT : Compatible / Peu compatible / À éviter — (1 phrase directe et honnête)
-
-Sois honnête. Si une info manque, dis-le clairement. Pas de faux enthousiasme.`;
+Analyse en 5 points courts :
+1. 🔧 TRAVAUX DEMANDÉS :
+2. 📦 TYPE DE PIÈCES :
+3. 💰 PRIX :
+4. 🏭 COMPATIBLE ATELIER : Oui / Non / Incertain
+5. ✅ VERDICT : Compatible / Peu compatible / À éviter`;
 
   try {
     const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -274,23 +245,14 @@ Sois honnête. Si une info manque, dis-le clairement. Pas de faux enthousiasme.`
       })
     });
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      return res.status(500).json({ error: err?.error?.message || "Erreur API" });
-    }
-
     const data = await response.json();
     const texte = data.content?.map(b => b.text || "").join("\n").trim() || "";
     res.json({ success: true, resume: texte });
-
   } catch (e) {
     res.status(500).json({ error: "Erreur serveur: " + e.message });
   }
 });
 
-// ══════════════════════════════════════
-//  SANTÉ DU SERVEUR
-// ══════════════════════════════════════
 app.get('/api/ping', (req, res) => {
   res.json({ status: "ok", message: "Serveur CTS Hervé actif" });
 });
