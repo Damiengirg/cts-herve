@@ -222,6 +222,12 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;min-
       <button class="fbtn" onclick="setF('orange',this)">🟠 À étudier</button>
       <button class="fbtn" onclick="setF('rouge',this)">🔴 Éviter</button>
     </div>
+    <div class="filtres" id="triFiltres">
+      <span style="font-size:11px;color:var(--mute);padding:7px 4px">Trier par :</span>
+      <button class="fbtn active" id="triD" onclick="setTri('distance',this)">📏 Distance</button>
+      <button class="fbtn" id="triS" onclick="setTri('score',this)">🎯 Score</button>
+      <button class="fbtn" id="triP" onclick="setTri('date',this)">📅 Date</button>
+    </div>
     <div class="search-box">
       <input type="text" id="si" placeholder="Filtrer par ville, acheteur, type de marché…" oninput="render()">
     </div>
@@ -294,7 +300,7 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;min-
 <script>
 const KW_M = ["sablage","grenaillage","traitement de surface","peinture industrielle","anticorrosion","époxy","polyuréthane","métallisation","thermolaquage","remise en peinture","garde-corps","candélabre","lampadaire","mobilier urbain","barrière métallique","serrurerie métallique","portail acier","charpente métallique","passerelle acier","ouvrages métalliques","zinc silicate"];
 
-let marches=[], saved=JSON.parse(localStorage.getItem("cts_sv")||"[]");
+let marches=[], saved=JSON.parse(localStorage.getItem("cts_sv")||"[]"), triActuel="distance";
 let filtre="tous", mIdx=null, toastT;
 
 function getServeur(){return localStorage.getItem("cts_srv")||"";}
@@ -430,8 +436,9 @@ async function iaModal(){
     if(!data.success)throw new Error(data.error||"Erreur");
     marches[mIdx].aiSummary=data.resume;
     div.innerHTML=data.resume.split("\n").filter(l=>l.trim()).map(l=>`<div style="font-size:13px;color:var(--txt);line-height:1.75;margin-bottom:6px">${l}</div>`).join("");
+    div.scrollIntoView({behavior:'smooth',block:'nearest'});
     btn.textContent="🔄 Re-analyser";btn.disabled=false;
-    render();showToast("✨ Analyse prête");
+    showToast("✨ Analyse prête");
   }catch(e){
     div.innerHTML='<em style="font-size:12px;color:var(--rouge)">Erreur. Vérifiez votre connexion.</em>';
     btn.textContent="↻ Réessayer";btn.disabled=false;
@@ -580,6 +587,19 @@ function setTab(id,btn){
   btn.classList.add("active");
   if(id==="s")renderSv();
   if(id==="c")renderCfg();
+}
+function setTri(t,btn){
+  triActuel=t;
+  document.querySelectorAll("#triFiltres .fbtn").forEach(b=>b.classList.remove("active"));
+  btn.classList.add("active");
+  // Re-trier localement
+  if(t==="distance") marches.sort((a,b)=>a.distance-b.distance);
+  else if(t==="score") marches.sort((a,b)=>b.score-a.score);
+  else marches.sort((a,b)=>{
+    if(a.datePublication&&b.datePublication) return new Date(b.datePublication)-new Date(a.datePublication);
+    return b.score-a.score;
+  });
+  render();
 }
 function setF(f,btn){
   filtre=f;
