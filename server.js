@@ -125,37 +125,31 @@ async function fetchBOAMP(query) {
 
     // Log les champs du premier résultat pour debug
     if (records.length > 0) {
-      const r0 = records[0];
-      console.log("Champs disponibles:", Object.keys(r0).join(", "));
-      console.log("Sample:", JSON.stringify({
-        idweb: r0.idweb, lieu_exec_code_postal: r0.lieu_exec_code_postal,
-        cp_acheteur: r0.cp_acheteur, lieu_exec_cp: r0.lieu_exec_cp,
-        lieu_exec_localite: r0.lieu_exec_localite, commune: r0.commune,
-        code_postal: r0.code_postal, dept: r0.departement_execution
-      }));
+      console.log("Champs disponibles:", Object.keys(records[0]).join(", "));
     }
 
     return records.map(r => {
       // L'API v2.1 retourne les champs directement (pas dans r.fields)
-      const idweb = r.idweb || "";
-      // Champs réels confirmés par les logs BOAMP
-      const dept = (r.code_departement || r.code_departement_prestation || "").toString().substring(0,2);
-      const cpVille = dept ? dept + "000" : "";
+      const idweb = r.idweb || r.id_web || r.numero_avis || "";
+      const cpVille = r.lieu_exec_code_postal || r.cp_acheteur || r.lieu_exec_cp || "";
+      const dept = cpVille.toString().replace(/[^0-9]/g, "").substring(0, 2) || "";
       const dateLimit = r.date_limite_reponse || r.datelimitereponse || r.date_limite || "";
       const datePub = r.dateparution || r.date_parution || "";
       const daysLeft = dateLimit
         ? Math.round((new Date(dateLimit) - Date.now()) / 86400000)
         : null;
       const uid = idweb || (r.id || Math.random().toString(36).substring(2));
-      const urlDirecte = r.url_avis || (idweb ? `https://www.boamp.fr/avis/detail/${idweb}` : "https://www.boamp.fr");
+      const urlDirecte = idweb
+        ? `https://www.boamp.fr/avis/detail/${idweb}`
+        : "https://www.boamp.fr";
 
       return {
         id: uid,
         reference: idweb || r.reference || "",
         titre: r.objet || r.intitule || r.libelle || "Marché sans titre",
         description: [r.objet || "", r.descriptif || "", r.libelle_nature || ""].join(" "),
-        acheteur: r.nomacheteur || r.nom_acheteur || r.acheteur || "Acheteur public",
-        ville: r.lieu_exec_localite || r.commune || r.ville || r.perimetre || "",
+        acheteur: r.nom_acheteur || r.acheteur || r.intitule_acheteur || "Acheteur public",
+        ville: r.lieu_exec_localite || r.commune || r.ville || cpVille || "",
         dept,
         montant: parseFloat(r.montant_estime || r.montant || 0) || null,
         datePublication: datePub,
