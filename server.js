@@ -137,29 +137,25 @@ async function fetchBOAMP(query) {
 
     return records.map(r => {
       // L'API v2.1 retourne les champs directement (pas dans r.fields)
-      const idweb = r.idweb || r.id_web || r.numero_avis || "";
-      // Chercher le département dans plusieurs champs
-      const deptDirect = (r.departement_execution || r.dept_exec || "").toString().padStart(2,'0').substring(0,2);
-      const cpVille = r.lieu_exec_code_postal || r.cp_acheteur || r.lieu_exec_cp || r.code_postal || "";
-      const deptFromCP = cpVille.toString().replace(/[^0-9]/g, "").substring(0, 2);
-      const dept = deptDirect || deptFromCP || "";
+      const idweb = r.idweb || "";
+      // Champs réels confirmés par les logs BOAMP
+      const dept = (r.code_departement || r.code_departement_prestation || "").toString().substring(0,2);
+      const cpVille = dept ? dept + "000" : "";
       const dateLimit = r.date_limite_reponse || r.datelimitereponse || r.date_limite || "";
       const datePub = r.dateparution || r.date_parution || "";
       const daysLeft = dateLimit
         ? Math.round((new Date(dateLimit) - Date.now()) / 86400000)
         : null;
       const uid = idweb || (r.id || Math.random().toString(36).substring(2));
-      const urlDirecte = idweb
-        ? `https://www.boamp.fr/avis/detail/${idweb}`
-        : "https://www.boamp.fr";
+      const urlDirecte = r.url_avis || (idweb ? `https://www.boamp.fr/avis/detail/${idweb}` : "https://www.boamp.fr");
 
       return {
         id: uid,
         reference: idweb || r.reference || "",
         titre: r.objet || r.intitule || r.libelle || "Marché sans titre",
         description: [r.objet || "", r.descriptif || "", r.libelle_nature || ""].join(" "),
-        acheteur: r.nom_acheteur || r.acheteur || r.intitule_acheteur || "Acheteur public",
-        ville: r.lieu_exec_localite || r.commune || r.ville || cpVille || "",
+        acheteur: r.nomacheteur || r.nom_acheteur || r.acheteur || "Acheteur public",
+        ville: r.lieu_exec_localite || r.commune || r.ville || r.perimetre || "",
         dept,
         montant: parseFloat(r.montant_estime || r.montant || 0) || null,
         datePublication: datePub,
