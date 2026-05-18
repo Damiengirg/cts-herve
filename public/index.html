@@ -293,12 +293,48 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;min-
   <div class="cfg-card">
     <div class="cfg-t">🔑 Mots-clés surveillés</div>
     <div class="kw-wrap" id="kwI"></div>
+    <div style="display:flex;gap:7px;margin-top:10px">
+      <input id="kwInput" class="cfg-sel" style="flex:1" placeholder="Ajouter un mot-clé..." onkeydown="if(event.key==='Enter')addKw()">
+      <button onclick="addKw()" style="background:var(--vert);border:none;border-radius:8px;padding:9px 14px;color:#0f1117;font-weight:700;cursor:pointer;font-size:13px">+</button>
+    </div>
+    <button onclick="resetKw()" style="margin-top:8px;background:transparent;border:1px solid var(--bord);border-radius:7px;padding:6px 12px;color:var(--mute);font-size:11px;cursor:pointer">↺ Réinitialiser les mots-clés par défaut</button>
   </div>
 </div>
 </div>
 
 <script>
 const KW_M = ["sablage","grenaillage","traitement de surface","peinture industrielle","anticorrosion","époxy","polyuréthane","métallisation","thermolaquage","remise en peinture","garde-corps","candélabre","lampadaire","mobilier urbain","barrière métallique","serrurerie métallique","portail acier","charpente métallique","passerelle acier","ouvrages métalliques","zinc silicate"];
+
+function getKW(){
+  const stored=localStorage.getItem("cts_kw");
+  return stored?JSON.parse(stored):KW_M;
+}
+function saveKW(kws){
+  localStorage.setItem("cts_kw",JSON.stringify(kws));
+  renderKW();
+}
+function addKw(){
+  const inp=document.getElementById("kwInput");
+  const val=inp.value.trim().toLowerCase();
+  if(!val)return;
+  const kws=getKW();
+  if(!kws.includes(val)){kws.push(val);saveKW(kws);}
+  inp.value="";
+}
+function removeKw(k){
+  const kws=getKW().filter(x=>x!==k);
+  saveKW(kws);
+}
+function resetKw(){
+  localStorage.removeItem("cts_kw");
+  renderKW();
+}
+function renderKW(){
+  const ki=document.getElementById("kwI");
+  if(!ki)return;
+  ki.innerHTML=getKW().map(k=>`<span class="kw" style="background:rgba(34,211,122,.11);border:1px solid rgba(34,211,122,.3);color:var(--vert);cursor:pointer" title="Cliquer pour supprimer" onclick="removeKw('${k.replace(/'/g,"\'")}')">✓ ${k} ×</span>`).join(" ");
+}
+
 
 let marches=[], saved=JSON.parse(localStorage.getItem("cts_sv")||"[]"), triActuel="distance";
 let filtre="tous", mIdx=null, toastT;
@@ -467,8 +503,16 @@ function openModal(idx){
     ["🎯 Score",m.score+"/100 — "+lblC[m.couleur]]
   ].map(([k,v])=>`<div class="ib"><div class="ib-l">${k}</div><div class="ib-v" style="${k.includes("Score")?"color:"+c+";font-family:'Syne',sans-serif;font-size:17px;font-weight:800":""}">${v}</div></div>`).join("");
 
+  const scOrder = ["Correspondance métier","Compatible atelier","Distance","Temps pour répondre"];
+  const scDetails = (m.scoreDetails||[])
+    .filter(d=>!d.l.includes("Temps pour répondre"))
+    .sort((a,b)=>{
+      const ia=scOrder.findIndex(x=>a.l.includes(x));
+      const ib=scOrder.findIndex(x=>b.l.includes(x));
+      return (ia<0?99:ia)-(ib<0?99:ib);
+    });
   document.getElementById("mSc").innerHTML=`<div class="sc-t">Détail du score</div>`+
-    (m.scoreDetails||[]).map(d=>`<div class="sc-row"><span class="sc-lbl">${d.l}</span><div class="sc-bar"><div class="sc-fill" style="width:${d.mx>0?Math.round(Math.max(0,d.p)/d.mx*100):0}%;background:${c}"></div></div><span class="sc-pts" style="color:${c}">${d.p}${d.mx>0?"/"+d.mx:""}</span></div>`).join("");
+    scDetails.map(d=>`<div class="sc-row"><span class="sc-lbl">${d.l}</span><div class="sc-bar"><div class="sc-fill" style="width:${d.mx>0?Math.round(Math.max(0,d.p)/d.mx*100):0}%;background:${c}"></div></div><span class="sc-pts" style="color:${c}">${d.p}${d.mx>0?"/"+d.mx:""}</span></div>`).join("");
 
   const div=document.getElementById("mIATxt");
   const btn=document.getElementById("btnIA");
@@ -485,8 +529,12 @@ function openModal(idx){
   bs.textContent=sv?"✓ Sauvegardé":"💾 Sauvegarder";
   bs.className="btn-sauv"+(sv?" saved":"");
   document.getElementById("mo").classList.add("open");
+  history.pushState({modal:true},"");
 }
 function closeModal(){document.getElementById("mo").classList.remove("open");mIdx=null;}
+window.addEventListener("popstate",function(e){
+  if(document.getElementById("mo").classList.contains("open")){closeModal();}
+});
 function closeOut(e){if(e.target===document.getElementById("mo"))closeModal();}
 function toggleSvModal(){
   if(mIdx===null)return;
@@ -608,7 +656,7 @@ function setF(f,btn){
 }
 function renderCfg(){
   const ki=document.getElementById("kwI");
-  if(ki)ki.innerHTML=KW_M.map(k=>`<span class="kw" style="background:rgba(34,211,122,.11);border:1px solid rgba(34,211,122,.3);color:var(--vert)">✓ ${k}</span>`).join(" ");
+  renderKW();
   const srv=localStorage.getItem("cts_srv")||"";
   if(srv)document.getElementById("cfgServeur").value=srv;
   const dept=localStorage.getItem("cts_dept")||"51";
