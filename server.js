@@ -125,14 +125,24 @@ async function fetchBOAMP(query) {
 
     // Log les champs du premier résultat pour debug
     if (records.length > 0) {
-      console.log("Champs disponibles:", Object.keys(records[0]).join(", "));
+      const r0 = records[0];
+      console.log("Champs disponibles:", Object.keys(r0).join(", "));
+      console.log("Sample:", JSON.stringify({
+        idweb: r0.idweb, lieu_exec_code_postal: r0.lieu_exec_code_postal,
+        cp_acheteur: r0.cp_acheteur, lieu_exec_cp: r0.lieu_exec_cp,
+        lieu_exec_localite: r0.lieu_exec_localite, commune: r0.commune,
+        code_postal: r0.code_postal, dept: r0.departement_execution
+      }));
     }
 
     return records.map(r => {
       // L'API v2.1 retourne les champs directement (pas dans r.fields)
       const idweb = r.idweb || r.id_web || r.numero_avis || "";
-      const cpVille = r.lieu_exec_code_postal || r.cp_acheteur || r.lieu_exec_cp || "";
-      const dept = cpVille.toString().replace(/[^0-9]/g, "").substring(0, 2) || "";
+      // Chercher le département dans plusieurs champs
+      const deptDirect = (r.departement_execution || r.dept_exec || "").toString().padStart(2,'0').substring(0,2);
+      const cpVille = r.lieu_exec_code_postal || r.cp_acheteur || r.lieu_exec_cp || r.code_postal || "";
+      const deptFromCP = cpVille.toString().replace(/[^0-9]/g, "").substring(0, 2);
+      const dept = deptDirect || deptFromCP || "";
       const dateLimit = r.date_limite_reponse || r.datelimitereponse || r.date_limite || "";
       const datePub = r.dateparution || r.date_parution || "";
       const daysLeft = dateLimit
