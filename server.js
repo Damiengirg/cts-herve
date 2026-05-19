@@ -45,20 +45,24 @@ function calculScore(m, kwRecherche){
   let s=0, det=[];
   const tx = nrm([m.titre, m.description, m.acheteur].join(" "));
 
-  // SCORE = mots-clés trouvés dans le TITRE uniquement (10 pts chacun, max 100)
+  // SCORE = 10 x nb_mots_clés dans le titre (doublé si 2, triplé si 3, etc.)
   const titreSeulement = nrm(m.titre);
   let kc=0, kwTrouves=[];
   for(const k of kwRecherche){
     if(titreSeulement.includes(nrm(k))){ kc++; kwTrouves.push(k); }
   }
-  let kp=Math.min(100,kc*10);
-  det.push({l:`🔧 Dans le titre : ${kwTrouves.length>0?kwTrouves.join(", "):"aucun mot-clé"}`,p:kp,mx:100});
+  const kp = kc * 10 * kc; // 1 mot=10, 2 mots=40, 3 mots=90, 4 mots=160 (plafonné)
+  det.push({l:`🔧 Mots-clés : ${kwTrouves.length>0?kwTrouves.join(", "):"aucun"}`,p:kp,mx:null});
   s+=kp;
 
-  return {total:Math.min(100,Math.round(s)),det};
+  return {total:Math.round(s),det};
 }
 
-function couleur(sc){ return sc>=20?"vert":sc>=10?"orange":"rouge"; }
+function couleur(sc){
+  // 1 mot=10, 2 mots=40, 3 mots=90, 4 mots=160
+  // rouge=1 mot, orange=2-3 mots, vert=4+ mots
+  return sc>=160?"vert":sc>=40?"orange":sc>=10?"rouge":"rouge";
+}
 
 function typeAtelier(tx){
   for(const k of KW_ATELIER){ if(nrm(tx).includes(nrm(k))) return "✓ Pièces atelier"; }
