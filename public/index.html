@@ -161,6 +161,22 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;min-
     </div>
   </div>
 
+  <div style="background:var(--surf);border:1px solid var(--bord);border-radius:10px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--mute);flex-shrink:0">📍 Dept :</span>
+    <select id="deptQuick" style="background:transparent;border:none;color:var(--txt);font-size:13px;font-weight:600;outline:none;cursor:pointer" onchange="quickDept(this.value)">
+      <option value="51">51 — Marne</option>
+      <option value="02">02 — Aisne</option><option value="08">08 — Ardennes</option>
+      <option value="10">10 — Aube</option><option value="52">52 — Haute-Marne</option>
+      <option value="54">54 — Meurthe-et-Moselle</option><option value="55">55 — Meuse</option>
+      <option value="57">57 — Moselle</option><option value="67">67 — Bas-Rhin</option>
+      <option value="68">68 — Haut-Rhin</option><option value="77">77 — Seine-et-Marne</option>
+      <option value="75">75 — Paris</option><option value="88">88 — Vosges</option>
+      <option value="89">89 — Yonne</option>
+    </select>
+    <span style="font-size:11px;color:var(--mute)">|</span>
+    <span style="font-size:12px;color:var(--mute);flex-shrink:0">🔑 Mots-clés :</span>
+    <div id="kwQuick" style="display:flex;flex-wrap:wrap;gap:4px;flex:1"></div>
+  </div>
   <button class="btn-chercher" id="btnChercher" onclick="lancer()">
     <span id="btnTxt">🔄 Chercher maintenant</span>
   </button>
@@ -264,13 +280,34 @@ let marches=[], saved=JSON.parse(localStorage.getItem("cts_sv")||"[]");
 let filtre="tous", tri="score", mIdx=null, toastT;
 
 // ── UTILS ──
+function quickDept(v){
+  localStorage.setItem("cts_dept",v);
+  const cfgDept=document.getElementById("cfgDept");
+  if(cfgDept) cfgDept.value=v;
+  showToast("📍 Département: "+v);
+}
+function renderKwQuick(){
+  const el=document.getElementById("kwQuick");
+  if(!el)return;
+  const kws=getKW();
+  el.innerHTML=kws.map(k=>`<span style="font-size:11px;padding:2px 7px;border-radius:12px;background:var(--vert-light);border:1px solid #86efac;color:var(--vert)">${k}</span>`).join("");
+}
+function highlightKW(txt){
+  const kws=getKW();
+  let r=txt;
+  for(const k of kws){
+    const re=new RegExp('('+k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi');
+    r=r.replace(re,'<mark style="background:#bbf7d0;color:#166534;border-radius:3px;padding:0 2px">$1</mark>');
+  }
+  return r;
+}
 function getSrv(){return localStorage.getItem("cts_srv")||"https://cts-herve.onrender.com";}
 function getDept(){return document.getElementById("cfgDept")?.value||localStorage.getItem("cts_dept")||"51";}
 function getKW(){const s=localStorage.getItem("cts_kw");return s?JSON.parse(s):[...KW_DEFAULT];}
 function cHex(c){return c==="vert"?var_css("--vert"):c==="orange"?var_css("--orange"):var_css("--rouge");}
 function var_css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
 function cDim(c){return c==="vert"?"rgba(22,163,74,.12)":c==="orange"?"rgba(217,119,6,.12)":"rgba(220,38,38,.12)";}
-const lblC={vert:"Compatible",orange:"À étudier",rouge:"Peu compatible"};
+const lblC={vert:"✅ Compatible (4+ mots)",orange:"🟡 À étudier (2-3 mots)",rouge:"🔴 Peu compatible (1 mot)"};
 function showToast(m){
   clearTimeout(toastT);
   const t=document.getElementById("toast");
@@ -365,12 +402,12 @@ function render(){
     const dist=m.dept&&m.dept!=="00"?`~${m.distance} km`:"dist. ?";
     return`<div class="carte" style="border-left-color:${c};animation-delay:${i*.03}s">
       ${m.reference?`<div class="c-ref">Réf. ${m.reference}</div>`:""}
-      <div class="c-titre">${m.titre}</div>
+      <div class="c-titre">${highlightKW(m.titre)}</div>
       <div class="chips">
         <span class="chip">🏢 ${m.acheteur.length>28?m.acheteur.slice(0,27)+"…":m.acheteur}</span>
         <span class="chip">📍 ${m.ville||"—"} (${m.dept||"?"})</span>
         <span class="chip">📏 ${dist}</span>
-        <span class="chip">💰 ${mt}</span>
+        ${m.montant?`<span class="chip">💰 ${mt}</span>`:""}
         <span class="chip ${m.daysLeft!=null&&m.daysLeft<14?"o":""}">⏰ ${jours}</span>
         <span class="chip">📅 ${dp}</span>
         <span class="chip ${m.typeAtelier==="✓ Pièces atelier"?"v":""}">${m.typeAtelier||"? À vérifier"}</span>
@@ -379,7 +416,7 @@ function render(){
         <div style="display:flex;align-items:center;gap:9px">
           <div class="score-box" style="background:${cd};border-color:${c}50">
             <span class="score-num" style="color:${c}">${m.score}</span>
-            <span style="font-size:10px;color:var(--mute)">/100</span>
+            <span style="font-size:10px;color:var(--mute)">pts</span>
           </div>
           <span class="c-lbl" style="color:${c}">${lblC[m.couleur]}</span>
         </div>
@@ -415,7 +452,7 @@ function openModal(idx){
 
   // Score : correspondance métier en 1er, sans "temps pour répondre"
   const scDetails=(m.scoreDetails||[]).filter(d=>!d.l.toLowerCase().includes("temps"));
-  document.getElementById("mSc").innerHTML=`<div class="sc-t">Score : ${m.score}/100 — ${lblC[m.couleur]}</div>`+
+  document.getElementById("mSc").innerHTML=`<div class="sc-t">Score : ${m.score} pts — ${lblC[m.couleur]}</div>`+
     scDetails.map(d=>`<div class="sc-row">
       <span class="sc-lbl">${d.l}</span>
       <div class="sc-bar"><div class="sc-fill" style="width:${d.mx>0?Math.round(Math.max(0,d.p)/d.mx*100):0}%;background:${c}"></div></div>
@@ -445,8 +482,12 @@ function closeModal(){
   mIdx=null;
 }
 function closeOut(e){if(e.target===document.getElementById("mo"))closeModal();}
-window.addEventListener("popstate",()=>{
-  if(document.getElementById("mo").classList.contains("open")) closeModal();
+window.addEventListener("popstate",function(e){
+  if(document.getElementById("mo").classList.contains("open")){
+    e.preventDefault();
+    closeModal();
+    return false;
+  }
 });
 
 // ── IA ──
@@ -582,6 +623,9 @@ document.addEventListener("DOMContentLoaded",()=>{
   document.getElementById("cfgSrv").value=getSrv();
   document.getElementById("svBadge").textContent=saved.length;
   renderKW();
+  renderKwQuick();
+  const dq=document.getElementById("deptQuick");
+  if(dq) dq.value=localStorage.getItem("cts_dept")||"51";
 });
 </script>
 </body>
