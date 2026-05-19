@@ -45,32 +45,32 @@ function calculScore(m, kwRecherche){
   let s=0, det=[];
   const tx = nrm([m.titre, m.description, m.acheteur].join(" "));
 
-  // Correspondance métier en premier (max 35)
-  let kc=0;
-  for(const k of kwRecherche){ if(tx.includes(nrm(k))) kc++; }
-  let kp=Math.min(35,kc*6);
-  det.push({l:`Correspondance métier (${kc}/${kwRecherche.length})`,p:kp,mx:35});
-  s+=kp;
-
-  // Compatible atelier (max 25)
-  let ap=8;
-  for(const k of KW_ATELIER){ if(tx.includes(nrm(k))){ ap=25; break; } }
-  det.push({l:"Compatible atelier",p:ap,mx:25});
+  // 1. COMPATIBLE ATELIER — 50 pts si pièces en atelier, 0 sinon (critère principal)
+  let ap=0;
+  for(const k of KW_ATELIER){ if(tx.includes(nrm(k))){ ap=50; break; } }
+  det.push({l:"✅ Pièces en atelier",p:ap,mx:50});
   s+=ap;
 
-  // Distance (max 25)
+  // 2. CORRESPONDANCE MÉTIER — 10 pts par mot-clé, max 40 pts
+  let kc=0;
+  for(const k of kwRecherche){ if(tx.includes(nrm(k))) kc++; }
+  let kp=Math.min(40,kc*10);
+  det.push({l:`🔧 Correspondance métier (${kc} mot${kc>1?"s":""})`,p:kp,mx:40});
+  s+=kp;
+
+  // 3. DISTANCE — max 10 pts (secondaire, transport possible)
   const d=m.distance||400;
-  let dp=d<50?25:d<100?20:d<150?15:d<250?10:d<350?5:2;
-  det.push({l:`Distance (${d} km)`,p:dp,mx:25});
+  let dp=d<100?10:d<200?8:d<300?6:d<400?4:2;
+  det.push({l:`📏 Distance (${d} km)`,p:dp,mx:10});
   s+=dp;
 
-  // Pénalité
-  for(const k of KW_EXCLUS){ if(tx.includes(nrm(k))){ s=Math.max(0,s-25); break; } }
+  // Pénalité hors métier
+  for(const k of KW_EXCLUS){ if(tx.includes(nrm(k))){ s=Math.max(0,s-30); break; } }
 
   return {total:Math.min(100,Math.round(s)),det};
 }
 
-function couleur(sc){ return sc>=55?"vert":sc>=35?"orange":"rouge"; }
+function couleur(sc){ return sc>=70?"vert":sc>=40?"orange":"rouge"; }
 
 function typeAtelier(tx){
   for(const k of KW_ATELIER){ if(nrm(tx).includes(nrm(k))) return "✓ Pièces atelier"; }
@@ -188,6 +188,4 @@ Réponds EXACTEMENT avec ces 4 lignes :
   }
 });
 
-app.get('/api/ping',(req,res)=>res.json({status:"ok",message:"Serveur CTS Hervé actif"}));
-
-app.listen(PORT,()=>console.log(`Serveur CTS Hervé port ${PORT}`));
+app.get('/api/ping',(req,res)=>res.json({stat
