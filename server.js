@@ -45,22 +45,20 @@ function calculScore(m, kwRecherche){
   let s=0, det=[];
   const tx = nrm([m.titre, m.description, m.acheteur].join(" "));
 
-  // SCORE UNIQUE = correspondance métier (10 pts par mot-clé, max 100)
+  // SCORE = mots-clés trouvés dans le TITRE uniquement (10 pts chacun, max 100)
+  const titreSeulement = nrm(m.titre);
   let kc=0, kwTrouves=[];
   for(const k of kwRecherche){
-    if(tx.includes(nrm(k))){ kc++; kwTrouves.push(k); }
+    if(titreSeulement.includes(nrm(k))){ kc++; kwTrouves.push(k); }
   }
   let kp=Math.min(100,kc*10);
-  det.push({l:`🔧 Mots-clés trouvés : ${kwTrouves.length>0?kwTrouves.slice(0,4).join(", ")+(kwTrouves.length>4?" +"+( kwTrouves.length-4):""):"aucun"}`,p:kp,mx:100});
+  det.push({l:`🔧 Dans le titre : ${kwTrouves.length>0?kwTrouves.join(", "):"aucun mot-clé"}`,p:kp,mx:100});
   s+=kp;
-
-  // Pénalité hors métier
-  for(const k of KW_EXCLUS){ if(tx.includes(nrm(k))){ s=Math.max(0,s-30); break; } }
 
   return {total:Math.min(100,Math.round(s)),det};
 }
 
-function couleur(sc){ return sc>=30?"vert":sc>=10?"orange":"rouge"; }
+function couleur(sc){ return sc>=20?"vert":sc>=10?"orange":"rouge"; }
 
 function typeAtelier(tx){
   for(const k of KW_ATELIER){ if(nrm(tx).includes(nrm(k))) return "✓ Pièces atelier"; }
