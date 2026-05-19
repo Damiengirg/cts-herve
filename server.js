@@ -23,9 +23,9 @@ const DIST51 = {
   "91":150,"92":145,"93":140,"94":145,"95":160
 };
 
-const KW_ATELIER = ["deposees","demontees","transportees","en atelier","avant pose",
-  "en usine","lot peinture","pieces deposees","avant repose","livraison atelier",
-  "avant installation","atelier","usine"];
+const KW_ATELIER = ["pieces deposees","pieces demontees","pieces transportees",
+  "en atelier","avant repose","avant pose","livraison atelier","retour atelier",
+  "lot peinture","traitement en atelier","depose et repose","pieces deposees"];
 
 const KW_EXCLUS = ["ravalement","facade","enduit","peinture interieure",
   "maintien circulation","autoroute","genie civil","terrassement","toiture","couverture"];
@@ -45,24 +45,14 @@ function calculScore(m, kwRecherche){
   let s=0, det=[];
   const tx = nrm([m.titre, m.description, m.acheteur].join(" "));
 
-  // 1. COMPATIBLE ATELIER — 50 pts si pièces en atelier, 0 sinon (critère principal)
-  let ap=0;
-  for(const k of KW_ATELIER){ if(tx.includes(nrm(k))){ ap=50; break; } }
-  det.push({l:"✅ Pièces en atelier",p:ap,mx:50});
-  s+=ap;
-
-  // 2. CORRESPONDANCE MÉTIER — 10 pts par mot-clé, max 40 pts
-  let kc=0;
-  for(const k of kwRecherche){ if(tx.includes(nrm(k))) kc++; }
-  let kp=Math.min(40,kc*10);
-  det.push({l:`🔧 Correspondance métier (${kc} mot${kc>1?"s":""})`,p:kp,mx:40});
+  // SCORE UNIQUE = correspondance métier (10 pts par mot-clé, max 100)
+  let kc=0, kwTrouves=[];
+  for(const k of kwRecherche){
+    if(tx.includes(nrm(k))){ kc++; kwTrouves.push(k); }
+  }
+  let kp=Math.min(100,kc*10);
+  det.push({l:`🔧 Mots-clés trouvés : ${kwTrouves.length>0?kwTrouves.slice(0,4).join(", ")+(kwTrouves.length>4?" +"+( kwTrouves.length-4):""):"aucun"}`,p:kp,mx:100});
   s+=kp;
-
-  // 3. DISTANCE — max 10 pts (secondaire, transport possible)
-  const d=m.distance||400;
-  let dp=d<100?10:d<200?8:d<300?6:d<400?4:2;
-  det.push({l:`📏 Distance (${d} km)`,p:dp,mx:10});
-  s+=dp;
 
   // Pénalité hors métier
   for(const k of KW_EXCLUS){ if(tx.includes(nrm(k))){ s=Math.max(0,s-30); break; } }
@@ -70,7 +60,7 @@ function calculScore(m, kwRecherche){
   return {total:Math.min(100,Math.round(s)),det};
 }
 
-function couleur(sc){ return sc>=70?"vert":sc>=40?"orange":"rouge"; }
+function couleur(sc){ return sc>=30?"vert":sc>=10?"orange":"rouge"; }
 
 function typeAtelier(tx){
   for(const k of KW_ATELIER){ if(nrm(tx).includes(nrm(k))) return "✓ Pièces atelier"; }
