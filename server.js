@@ -188,4 +188,6 @@ Réponds EXACTEMENT avec ces 4 lignes :
   }
 });
 
-app.get('/api/ping',(req,res)=>res.json({stat
+app.get('/api/ping',(req,res)=>res.json({status:"ok",message:"Serveur CTS Hervé actif"}));
+
+app.listen(PORT,()=>console.log(`Serveur CTS Hervé port ${PORT}`));
