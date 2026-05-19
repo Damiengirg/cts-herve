@@ -6,33 +6,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
-
 const PORT = process.env.PORT || 3000;
 
-const KW_RECHERCHE = [
-  "sablage", "grenaillage", "traitement de surface", "peinture industrielle",
-  "anticorrosion", "epoxy", "polyurethane", "metallisation", "thermolaquage",
-  "remise en peinture", "garde-corps", "candelabre", "lampadaire",
-  "mobilier urbain", "barriere metallique", "serrurerie metallique",
-  "portail acier", "charpente metallique", "passerelle acier",
-  "ouvrages metalliques", "zinc silicate", "protection anticorrosion",
-  "peinture acier", "traitement anticorrosion"
-];
-
-const KW_ATELIER = [
-  "deposees", "demontees", "transportees", "en atelier", "avant pose",
-  "en usine", "lot peinture", "pieces deposees", "avant repose",
-  "traitement en serie", "livraison atelier", "avant installation",
-  "atelier", "usine"
-];
-
-const KW_EXCLUS = [
-  "ravalement", "facade", "enduit", "peinture interieure",
-  "maintien circulation", "autoroute", "genie civil",
-  "terrassement", "VRD", "toiture", "couverture", "batiment"
-];
-
-// Distances depuis Marne (51) en km
 const DIST51 = {
   "02":90,"03":290,"04":500,"05":510,"06":620,"07":430,"08":130,"09":650,
   "10":80,"11":620,"12":430,"13":570,"14":380,"15":350,"16":480,"17":510,
@@ -48,240 +23,171 @@ const DIST51 = {
   "91":150,"92":145,"93":140,"94":145,"95":160
 };
 
-function nrm(s) {
-  return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+const KW_ATELIER = ["deposees","demontees","transportees","en atelier","avant pose",
+  "en usine","lot peinture","pieces deposees","avant repose","livraison atelier",
+  "avant installation","atelier","usine"];
+
+const KW_EXCLUS = ["ravalement","facade","enduit","peinture interieure",
+  "maintien circulation","autoroute","genie civil","terrassement","toiture","couverture"];
+
+function nrm(s){
+  return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 }
 
-function estDist(dept, refDept = "51") {
-  if (!dept) return 400;
-  const d = dept.toString().padStart(2, '0');
-  if (d === refDept) return 15;
-  return DIST51[d] || 350;
+function estDist(dept, ref="51"){
+  if(!dept) return 400;
+  const d = dept.toString().padStart(2,"0").substring(0,2);
+  if(d===ref) return 15;
+  return DIST51[d]||350;
 }
 
-function calculScore(m) {
-  let s = 0, det = [];
+function calculScore(m, kwRecherche){
+  let s=0, det=[];
   const tx = nrm([m.titre, m.description, m.acheteur].join(" "));
 
-  // Distance (max 25 pts)
-  const d = m.distance || 999;
-  let dp = d<50?25:d<100?20:d<200?14:d<300?8:d<400?4:1;
-  det.push({l: `Distance (${d} km)`, p: dp, mx: 25}); s += dp;
+  // Correspondance métier en premier (max 35)
+  let kc=0;
+  for(const k of kwRecherche){ if(tx.includes(nrm(k))) kc++; }
+  let kp=Math.min(35,kc*6);
+  det.push({l:`Correspondance métier (${kc}/${kwRecherche.length})`,p:kp,mx:35});
+  s+=kp;
 
-  // Compatible atelier (max 20 pts)
-  let ap = 0;
-  for (const k of KW_ATELIER) { if (tx.includes(nrm(k))) { ap = 20; break; } }
-  if (!ap) ap = 8; // neutre par défaut
-  det.push({l: "Compatible atelier", p: ap, mx: 20}); s += ap;
+  // Compatible atelier (max 25)
+  let ap=8;
+  for(const k of KW_ATELIER){ if(tx.includes(nrm(k))){ ap=25; break; } }
+  det.push({l:"Compatible atelier",p:ap,mx:25});
+  s+=ap;
 
-  // Correspondance métier (max 30 pts)
-  let kc = 0;
-  for (const k of KW_RECHERCHE) { if (tx.includes(nrm(k))) kc++; }
-  let kp = Math.min(30, kc * 5);
-  det.push({l: "Correspondance métier", p: kp, mx: 30}); s += kp;
+  // Distance (max 25)
+  const d=m.distance||400;
+  let dp=d<50?25:d<100?20:d<150?15:d<250?10:d<350?5:2;
+  det.push({l:`Distance (${d} km)`,p:dp,mx:25});
+  s+=dp;
 
-  // Délai raisonnable (max 15 pts)
-  const dl = m.daysLeft || 0;
-  let tp = dl>20?15:dl>10?10:dl>5?5:dl>0?2:0;
-  det.push({l: "Temps pour répondre", p: tp, mx: 15}); s += tp;
+  // Pénalité
+  for(const k of KW_EXCLUS){ if(tx.includes(nrm(k))){ s=Math.max(0,s-25); break; } }
 
-  // Pénalité mots exclus
-  let penalite = 0;
-  for (const k of KW_EXCLUS) {
-    if (tx.includes(nrm(k))) { penalite = 20; break; }
-  }
-  if (penalite) det.push({l: "⚠️ Hors métier", p: -penalite, mx: 0});
-  s = Math.max(0, s - penalite);
-
-  return { total: Math.min(100, Math.round(s)), det };
+  return {total:Math.min(100,Math.round(s)),det};
 }
 
-function couleur(sc) { return sc>=50?"vert":sc>=30?"orange":"rouge"; }
+function couleur(sc){ return sc>=55?"vert":sc>=35?"orange":"rouge"; }
 
-function typeAtelier(tx) {
-  const t = nrm(tx);
-  for (const k of KW_ATELIER) { if (t.includes(nrm(k))) return "✓ Pièces atelier"; }
-  if (t.includes("nacelle") || t.includes("echafaudage")) return "✗ Sur site";
+function typeAtelier(tx){
+  for(const k of KW_ATELIER){ if(nrm(tx).includes(nrm(k))) return "✓ Pièces atelier"; }
   return "? À vérifier";
 }
 
-async function fetchBOAMP(query) {
-  const words = query.split(' ').filter(w => w.length > 3).map(w => `search(objet,"${w}")`).join(' OR ');
-  const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?where=${encodeURIComponent(words)}&limit=25&order_by=dateparution%20desc`;
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (compatible; CTS-Marches/1.0)',
-        'Accept': 'application/json'
-      },
-      signal: AbortSignal.timeout(15000)
-    });
-    if (!res.ok) {
-      console.error(`BOAMP error ${res.status} for query: ${query}`);
-      return [];
-    }
+async function fetchBOAMP(keywords){
+  const where = keywords.slice(0,5).map(k=>`search(objet,"${k.replace(/"/g,'')}")`).join(' OR ');
+  const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?where=${encodeURIComponent(where)}&limit=25&order_by=dateparution%20desc`;
+  try{
+    const res = await fetch(url,{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(15000)});
+    if(!res.ok){ console.error(`BOAMP ${res.status}`); return []; }
     const data = await res.json();
-    const records = data?.results || [];
-
-    // Log les champs du premier résultat pour debug
-    if (records.length > 0) {
-      console.log("Champs disponibles:", Object.keys(records[0]).join(", "));
-    }
-
-    return records.map(r => {
-      // L'API v2.1 retourne les champs directement (pas dans r.fields)
-      const idweb = r.idweb || r.id_web || r.numero_avis || "";
-      const cpVille = r.lieu_exec_code_postal || r.cp_acheteur || r.lieu_exec_cp || "";
-      const dept = cpVille.toString().replace(/[^0-9]/g, "").substring(0, 2) || "";
-      const dateLimit = r.date_limite_reponse || r.datelimitereponse || r.date_limite || "";
-      const datePub = r.dateparution || r.date_parution || "";
-      const daysLeft = dateLimit
-        ? Math.round((new Date(dateLimit) - Date.now()) / 86400000)
-        : null;
-      const uid = idweb || (r.id || Math.random().toString(36).substring(2));
-      const urlDirecte = idweb
-        ? `https://www.boamp.fr/avis/detail/${idweb}`
-        : "https://www.boamp.fr";
-
+    const records = data?.results||[];
+    return records.map(r=>{
+      const idweb=r.idweb||"";
+      const dept=(r.code_departement||r.code_departement_prestation||"").toString().padStart(2,"0").substring(0,2);
+      const dateLimit=r.datelimitereponse||"";
+      const datePub=r.dateparution||"";
+      const daysLeft=dateLimit?Math.round((new Date(dateLimit)-Date.now())/86400000):null;
       return {
-        id: uid,
-        reference: idweb || r.reference || "",
-        titre: r.objet || r.intitule || r.libelle || "Marché sans titre",
-        description: [r.objet || "", r.descriptif || "", r.libelle_nature || ""].join(" "),
-        acheteur: r.nom_acheteur || r.acheteur || r.intitule_acheteur || "Acheteur public",
-        ville: r.lieu_exec_localite || r.commune || r.ville || cpVille || "",
+        id:idweb||Math.random().toString(36).substring(2),
+        reference:idweb,
+        titre:r.objet||"Sans titre",
+        description:[r.objet||"",r.descripteur_libelle||"",r.famille_libelle||""].join(" "),
+        acheteur:r.nomacheteur||"Acheteur public",
+        ville:r.perimetre||"",
         dept,
-        montant: parseFloat(r.montant_estime || r.montant || 0) || null,
-        datePublication: datePub,
+        montant:parseFloat(r.montant||0)||null,
+        datePublication:datePub,
         dateLimit,
         daysLeft,
-        urlDirecte,
-        source: "BOAMP"
+        urlDirecte:r.url_avis||(idweb?`https://www.boamp.fr/avis/detail/${idweb}`:"https://www.boamp.fr"),
+        source:"BOAMP"
       };
     });
-  } catch (e) {
-    console.error("BOAMP fetch error:", e.message);
-    return [];
-  }
+  }catch(e){ console.error("BOAMP:",e.message); return []; }
 }
 
-app.get('/api/marches', async (req, res) => {
-  const dept = req.query.dept || "51";
-  const tri = req.query.tri || "distance"; // distance, score, date
-  console.log(`Recherche lancée — dept: ${dept}, tri: ${tri}`);
+app.get('/api/marches', async (req,res)=>{
+  const dept=req.query.dept||"51";
+  const tri=req.query.tri||"score";
+  const kwParam=req.query.kw||"";
+  const kwRecherche=kwParam
+    ? kwParam.split(",").map(k=>k.trim()).filter(Boolean)
+    : ["sablage","grenaillage","peinture industrielle","anticorrosion",
+       "traitement de surface","thermolaquage","metallisation",
+       "garde-corps","candelabre","serrurerie acier"];
 
-  const queries = [
-    "sablage grenaillage surface",
-    "peinture industrielle metallique acier",
-    "anticorrosion epoxy polyurethane",
-    "garde-corps candélabre lampadaire",
-    "mobilier urbain traitement surface",
-    "serrurerie portail acier peinture",
-    "thermolaquage metallisation zinc",
-    "charpente passerelle acier peinture"
-  ];
+  console.log(`Recherche dept:${dept} kw:${kwRecherche.join(",")}`);
 
-  let tous = [];
-  for (const q of queries) {
-    const res2 = await fetchBOAMP(q);
-    tous.push(...res2);
-    await new Promise(r => setTimeout(r, 250));
+  let tous=[];
+  for(let i=0;i<kwRecherche.length;i+=5){
+    const chunk=kwRecherche.slice(i,i+5);
+    const r=await fetchBOAMP(chunk);
+    tous.push(...r);
+    if(i+5<kwRecherche.length) await new Promise(r=>setTimeout(r,300));
   }
 
-  // Dédupliquer
-  const seen = new Set();
-  tous = tous.filter(m => {
-    if (seen.has(m.id)) return false;
-    seen.add(m.id);
-    return true;
-  });
-
-  // Garder annonces valides
-  tous = tous.filter(m => m.daysLeft === null || m.daysLeft > 0);
-
-  // Enrichir
-  tous = tous.map(m => {
-    m.distance = estDist(m.dept, dept);
-    const sc = calculScore(m);
-    m.score = sc.total;
-    m.scoreDetails = sc.det;
-    m.couleur = couleur(m.score);
-    m.typeAtelier = typeAtelier(m.description);
+  const seen=new Set();
+  tous=tous.filter(m=>{ if(seen.has(m.id)) return false; seen.add(m.id); return true; });
+  tous=tous.filter(m=>m.daysLeft===null||m.daysLeft>0);
+  tous=tous.map(m=>{
+    m.distance=estDist(m.dept,dept);
+    const sc=calculScore(m,kwRecherche);
+    m.score=sc.total; m.scoreDetails=sc.det;
+    m.couleur=couleur(m.score);
+    m.typeAtelier=typeAtelier(m.description);
     return m;
   });
 
-  // Tri
-  if (tri === "distance") {
-    tous.sort((a, b) => a.distance - b.distance);
-  } else if (tri === "score") {
-    tous.sort((a, b) => b.score - a.score);
-  } else {
-    tous.sort((a, b) => {
-      if (a.datePublication && b.datePublication)
-        return new Date(b.datePublication) - new Date(a.datePublication);
-      return b.score - a.score;
-    });
-  }
+  if(tri==="distance") tous.sort((a,b)=>a.distance-b.distance);
+  else if(tri==="date") tous.sort((a,b)=>new Date(b.datePublication)-new Date(a.datePublication));
+  else tous.sort((a,b)=>b.score-a.score);
 
-  console.log(`Résultats: ${tous.length} annonces valides`);
-  res.json({ success: true, total: tous.length, marches: tous });
+  console.log(`${tous.length} annonces trouvées`);
+  res.json({success:true,total:tous.length,marches:tous});
 });
 
-app.post('/api/analyser', async (req, res) => {
-  const { marche } = req.body;
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "Clé API non configurée" });
-  if (!marche) return res.status(400).json({ error: "Données manquantes" });
+app.post('/api/analyser', async (req,res)=>{
+  const {marche}=req.body;
+  const apiKey=process.env.ANTHROPIC_API_KEY;
+  if(!apiKey) return res.status(500).json({error:"Clé API manquante"});
+  if(!marche) return res.status(400).json({error:"Données manquantes"});
 
-  const montantTxt = marche.montant
-    ? marche.montant.toLocaleString('fr-FR') + " €"
-    : "Prix non communiqué";
+  const montantTxt=marche.montant?Math.round(marche.montant).toLocaleString('fr-FR')+" €":"non communiqué";
+  const prompt=`Résume ce marché public en 4 lignes pour un artisan spécialisé en sablage et peinture industrielle.
 
-  const prompt = `Tu es expert marchés publics français, spécialiste traitement de surface industriel.
-
-Analyse ce marché pour CTS Hervé (sablage, grenaillage, peinture industrielle, anticorrosion) situé dans la Marne (51).
-
-RÉFÉRENCE : ${marche.reference || "Non précisée"}
-MARCHÉ : ${marche.titre}
+TITRE : ${marche.titre}
 ACHETEUR : ${marche.acheteur}
-LIEU : ${marche.ville} (${marche.dept}) — ${marche.distance} km
-MONTANT : ${montantTxt}
-DÉLAI : ${marche.daysLeft ? marche.daysLeft + " jours" : "Non précisé"}
-DESCRIPTION : ${marche.description.slice(0, 600)}
+LIEU : dept ${marche.dept||"?"} — ${marche.distance} km de l'atelier
+BUDGET : ${montantTxt}
+DÉLAI : ${marche.daysLeft?marche.daysLeft+" jours":"?"}
+DESCRIPTION : ${marche.description.slice(0,600)}
 
-Analyse en 5 points courts :
-1. 🔧 TRAVAUX DEMANDÉS :
-2. 📦 TYPE DE PIÈCES :
-3. 💰 PRIX :
-4. 🏭 COMPATIBLE ATELIER : Oui / Non / Incertain
-5. ✅ VERDICT : Compatible / Peu compatible / À éviter`;
+Réponds EXACTEMENT avec ces 4 lignes :
+🔧 Travaux : (décris ce qu'il faut faire)
+📦 Matériaux : (pièces métalliques, garde-corps, etc.)
+💰 Budget : (montant ou estimation)
+✅ Verdict : Compatible / Peu compatible / À éviter — (raison courte)`;
 
-  try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 500,
-        messages: [{ role: "user", content: prompt }]
-      })
+  try{
+    const r=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
+      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:300,messages:[{role:"user",content:prompt}]})
     });
-    const data = await response.json();
-    const texte = data.content?.map(b => b.text || "").join("\n").trim() || "";
-    res.json({ success: true, resume: texte });
-  } catch (e) {
-    res.status(500).json({ error: "Erreur: " + e.message });
+    const data=await r.json();
+    if(data.error) throw new Error(data.error.message);
+    const texte=data.content?.map(b=>b.text||"").join("\n").trim()||"";
+    res.json({success:true,resume:texte});
+  }catch(e){
+    console.error("IA:",e.message);
+    res.status(500).json({error:"Erreur: "+e.message});
   }
 });
 
-app.get('/api/ping', (req, res) => {
-  res.json({ status: "ok", message: "Serveur CTS Hervé actif" });
-});
+app.get('/api/ping',(req,res)=>res.json({status:"ok",message:"Serveur CTS Hervé actif"}));
 
-app.listen(PORT, () => {
-  console.log(`Serveur CTS Hervé démarré sur le port ${PORT}`);
-});
+app.listen(PORT,()=>console.log(`Serveur CTS Hervé port ${PORT}`));
