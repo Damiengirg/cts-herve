@@ -1,673 +1,193 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MarchésAtelier — CTS Hervé</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap');
-:root{
-  --bg:#0f1117;--surf:#171b26;--surf2:#1e2333;
-  --bord:#2a2f42;--txt:#e8eaf0;--mute:#6b7290;
-  --vert:#22d37a;--orange:#f5a623;--rouge:#e8445a;
-  --violet:#a78bfa;--bleu:#4d8cff;
-}
-*{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;min-height:100vh}
-::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:#343854;border-radius:3px}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+const express = require('express');
+const cors = require('cors');
+const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args));
 
-.header{background:var(--surf);border-bottom:1px solid var(--bord);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100;flex-wrap:wrap;gap:8px}
-.logo{font-family:'Syne',sans-serif;font-size:19px;font-weight:800;color:var(--vert)}
-.logo span{color:var(--txt)}
-.logo sub{font-size:10px;color:var(--mute);font-weight:400;font-family:'DM Sans',sans-serif;margin-left:6px;vertical-align:baseline}
-.badge-live{background:rgba(34,211,122,.13);border:1px solid var(--vert);color:var(--vert);padding:4px 10px;border-radius:20px;font-size:11px;font-weight:500;display:flex;align-items:center;gap:5px}
-.dot{width:6px;height:6px;background:var(--vert);border-radius:50%;animation:pulse 1.8s infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.btn-hdr{background:transparent;border:1px solid var(--bord);border-radius:8px;padding:6px 12px;color:var(--mute);font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all .2s}
-.btn-hdr:hover{border-color:var(--vert);color:var(--vert)}
+const app = express();
+app.use(cors());
+app.use(express.json());
+app.use(express.static('public'));
+const PORT = process.env.PORT || 3000;
 
-.tabs{background:var(--surf);border-bottom:1px solid var(--bord);display:flex;padding:0 18px;overflow-x:auto}
-.tab{padding:11px 14px;background:none;border:none;color:var(--mute);cursor:pointer;border-bottom:2px solid transparent;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:500;white-space:nowrap;transition:all .2s;display:flex;align-items:center;gap:5px}
-.tab.active{color:var(--vert);border-bottom-color:var(--vert)}
-.tab-badge{background:var(--vert);color:#0f1117;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700}
+const DIST51 = {
+  "02":90,"03":290,"04":500,"05":510,"06":620,"07":430,"08":130,"09":650,
+  "10":80,"11":620,"12":430,"13":570,"14":380,"15":350,"16":480,"17":510,
+  "18":250,"19":370,"21":180,"22":560,"23":340,"24":490,"25":260,"26":480,
+  "27":310,"28":200,"29":680,"30":530,"31":600,"32":580,"33":540,"34":530,
+  "35":480,"36":300,"37":280,"38":490,"39":270,"40":610,"41":210,"42":380,
+  "43":370,"44":490,"45":170,"46":450,"47":450,"48":450,"49":400,"50":430,
+  "51":15,"52":90,"53":350,"54":160,"55":110,"56":570,"57":180,"58":190,
+  "59":280,"60":160,"61":310,"62":320,"63":360,"64":640,"65":610,"66":590,
+  "67":300,"68":320,"69":400,"70":230,"71":280,"72":290,"73":490,"74":520,
+  "75":140,"76":270,"77":110,"78":160,"79":430,"80":210,"81":570,"82":540,
+  "83":610,"84":530,"85":590,"86":380,"87":400,"88":210,"89":130,"90":290,
+  "91":150,"92":145,"93":140,"94":145,"95":160
+};
 
-.container{max-width:860px;margin:0 auto;padding:16px 12px}
-.panel{display:none}.panel.active{display:block}
+const KW_ATELIER = ["deposees","demontees","transportees","en atelier","avant pose",
+  "en usine","lot peinture","pieces deposees","avant repose","livraison atelier",
+  "avant installation","atelier","usine"];
 
-.compteurs{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:16px}
-.cpt{background:var(--surf);border-radius:11px;padding:11px 12px;text-align:center;border:1px solid}
-.cpt-l{font-size:10px;color:var(--mute);margin-bottom:4px}
-.cpt-v{font-family:'Syne',sans-serif;font-size:26px;font-weight:800}
+const KW_EXCLUS = ["ravalement","facade","enduit","peinture interieure",
+  "maintien circulation","autoroute","genie civil","terrassement","toiture","couverture"];
 
-.btn-chercher{width:100%;background:var(--vert);border:none;border-radius:12px;padding:15px;font-family:'Syne',sans-serif;font-size:15px;font-weight:800;color:#0f1117;cursor:pointer;margin-bottom:13px;display:flex;align-items:center;justify-content:center;gap:8px;transition:all .2s}
-.btn-chercher:disabled{opacity:.5;cursor:not-allowed}
-
-.filtres{display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap}
-.fbtn{background:transparent;border:1px solid var(--bord);border-radius:8px;padding:7px 12px;color:var(--mute);font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;font-family:'DM Sans',sans-serif}
-.fbtn.active{border-color:var(--vert);color:var(--vert);background:rgba(34,211,122,.1)}
-
-.search-box{position:relative;margin-bottom:13px}
-.search-box input{width:100%;background:var(--surf);border:1px solid var(--bord);border-radius:9px;padding:10px 12px 10px 36px;color:var(--txt);font-family:'DM Sans',sans-serif;font-size:13px;outline:none}
-.search-box input:focus{border-color:var(--vert)}
-.search-box::before{content:'🔍';position:absolute;left:10px;top:50%;transform:translateY(-50%);font-size:14px}
-
-.carte{background:var(--surf);border-radius:13px;padding:15px;margin-bottom:11px;border-left:4px solid;animation:fadeIn .3s ease both}
-.c-ref{font-size:10px;color:var(--mute);margin-bottom:5px;font-family:'DM Sans',sans-serif}
-.c-titre{font-size:14px;font-weight:600;color:var(--txt);line-height:1.4;margin-bottom:9px}
-.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:11px}
-.chip{font-size:11px;padding:3px 8px;border-radius:20px;background:var(--surf2);border:1px solid var(--bord);color:var(--mute);display:flex;align-items:center;gap:3px;white-space:nowrap}
-.chip.v{background:rgba(34,211,122,.12);border-color:rgba(34,211,122,.35);color:var(--vert)}
-.chip.o{background:rgba(245,166,35,.12);border-color:rgba(245,166,35,.35);color:var(--orange)}
-.chip.r{background:rgba(232,68,90,.12);border-color:rgba(232,68,90,.35);color:var(--rouge)}
-
-.c-bottom{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px}
-.score-box{border-radius:9px;padding:6px 12px;display:flex;align-items:baseline;gap:3px;border:1px solid}
-.score-num{font-family:'Syne',sans-serif;font-size:24px;font-weight:800}
-.c-btns{display:flex;gap:6px;align-items:center}
-.btn-rond{width:34px;height:34px;border-radius:8px;border:1px solid;background:transparent;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.btn-voir{background:var(--vert);border:none;border-radius:9px;padding:8px 18px;color:#0f1117;font-family:'Syne',sans-serif;font-weight:700;font-size:13px;cursor:pointer}
-
-.ia-inline{margin-top:11px;background:rgba(167,139,250,.09);border:1px solid rgba(167,139,250,.25);border-radius:10px;padding:12px}
-.ia-lbl{font-size:10px;color:var(--violet);font-weight:600;text-transform:uppercase;letter-spacing:.7px;margin-bottom:7px}
-.ia-ligne{font-size:12px;color:var(--txt);line-height:1.75;margin-bottom:5px}
-
-.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.87);z-index:500;align-items:center;justify-content:center;padding:12px;backdrop-filter:blur(5px)}
-.mo.open{display:flex}
-.modal{background:var(--surf);border:1px solid var(--bord);border-radius:17px;padding:20px;max-width:660px;width:100%;max-height:92vh;overflow-y:auto;animation:slideUp .22s ease}
-.m-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;gap:10px}
-.m-ref{font-size:11px;color:var(--mute);margin-bottom:4px}
-.m-titre{font-family:'Syne',sans-serif;font-size:15px;font-weight:700;color:var(--txt);line-height:1.35;flex:1}
-.m-close{background:var(--surf2);border:1px solid var(--bord);color:var(--mute);width:31px;height:31px;border-radius:7px;cursor:pointer;font-size:15px;flex-shrink:0}
-
-.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:13px}
-.ib{background:var(--surf2);border:1px solid var(--bord);border-radius:8px;padding:10px 12px}
-.ib-l{font-size:10px;color:var(--mute);margin-bottom:3px}
-.ib-v{font-size:13px;font-weight:500;color:var(--txt)}
-
-.sc-sec{background:var(--surf2);border:1px solid var(--bord);border-radius:9px;padding:13px;margin-bottom:13px}
-.sc-t{font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.7px;margin-bottom:9px}
-.sc-row{display:flex;align-items:center;gap:9px;margin-bottom:7px;font-size:12px}
-.sc-lbl{flex:1;color:var(--txt)}
-.sc-bar{width:90px;height:4px;background:var(--bord);border-radius:2px;overflow:hidden}
-.sc-fill{height:100%;border-radius:2px}
-.sc-pts{font-weight:600;font-size:11px;min-width:26px;text-align:right}
-
-.ia-modal{background:rgba(167,139,250,.09);border:1px solid rgba(167,139,250,.3);border-radius:10px;padding:14px;margin-bottom:13px}
-.ia-m-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;gap:8px}
-.ia-m-lbl{font-size:11px;color:var(--violet);font-weight:600;text-transform:uppercase;letter-spacing:.7px}
-.btn-ia{background:var(--violet);border:none;border-radius:7px;padding:7px 14px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
-.btn-ia:disabled{opacity:.5;cursor:not-allowed}
-.ia-load{display:flex;align-items:center;gap:8px;color:var(--violet);font-size:12px}
-.sp-sm{width:13px;height:13px;border:2px solid rgba(167,139,250,.3);border-top-color:var(--violet);border-radius:50%;animation:spin .7s linear infinite;flex-shrink:0}
-
-.m-acts{display:flex;gap:8px;flex-wrap:wrap}
-.btn-dos{background:var(--vert);color:#0f1117;border:none;border-radius:9px;padding:10px 16px;font-family:'Syne',sans-serif;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:5px}
-.btn-sauv{background:transparent;border:1px solid var(--vert);border-radius:9px;padding:10px 14px;color:var(--vert);font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif}
-.btn-sauv.saved{background:var(--vert);color:#0f1117}
-
-.exp-bar{background:var(--surf);border:1px solid var(--bord);border-radius:10px;padding:12px 15px;margin-bottom:15px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px}
-.sv-card{background:var(--surf);border-radius:13px;padding:15px;margin-bottom:10px;border-left:4px solid}
-.sv-titre{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--txt);margin-bottom:8px}
-.sv-acts{display:flex;gap:7px;margin-top:11px}
-.btn-link{background:rgba(77,140,255,.12);border:1px solid var(--bleu);color:var(--bleu);border-radius:7px;padding:6px 12px;font-size:12px;text-decoration:none}
-.btn-del{background:rgba(232,68,90,.11);border:1px solid var(--rouge);color:var(--rouge);border-radius:7px;padding:6px 11px;font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif}
-.btn-exp{background:var(--surf2);border:1px solid var(--bord);border-radius:7px;padding:7px 13px;color:var(--txt);font-size:12px;cursor:pointer;font-family:'DM Sans',sans-serif}
-
-.cfg-card{background:var(--surf);border:1px solid var(--bord);border-radius:13px;padding:18px;margin-bottom:13px}
-.cfg-t{font-family:'Syne',sans-serif;font-size:14px;font-weight:700;color:var(--txt);margin-bottom:10px}
-.cfg-sel{width:100%;background:var(--surf2);border:1px solid var(--bord);border-radius:8px;padding:10px 12px;color:var(--txt);font-family:'DM Sans',sans-serif;font-size:13px;outline:none}
-.kw-wrap{display:flex;flex-wrap:wrap;gap:5px}
-.kw{font-size:11px;padding:3px 8px;border-radius:20px}
-
-.lo{display:none;position:fixed;inset:0;background:rgba(15,17,23,.95);z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:13px}
-.lo.show{display:flex}
-.sp-lg{width:42px;height:42px;border:3px solid var(--bord);border-top-color:var(--vert);border-radius:50%;animation:spin .8s linear infinite}
-.lo-bar{width:200px;height:3px;background:var(--bord);border-radius:2px;overflow:hidden}
-.lo-fill{height:100%;background:var(--vert);border-radius:2px;transition:width .4s;width:0}
-
-.toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%) translateY(70px);background:var(--surf2);border:1px solid var(--vert);color:var(--vert);padding:9px 18px;border-radius:10px;font-size:13px;font-weight:500;z-index:9999;transition:transform .3s;white-space:nowrap}
-.toast.show{transform:translateX(-50%) translateY(0)}
-.vide{text-align:center;padding:50px 20px;color:var(--mute)}
-.vide-ico{font-size:46px;margin-bottom:12px}
-
-.erreur-serveur{background:rgba(232,68,90,.1);border:1px solid var(--rouge);border-radius:10px;padding:16px;margin-bottom:16px;font-size:13px;color:var(--rouge);display:none}
-</style>
-</head>
-<body>
-
-<!-- LOADING -->
-<div class="lo" id="lo">
-  <div class="sp-lg"></div>
-  <div style="font-family:'Syne',sans-serif;font-size:15px;color:var(--vert)">Recherche BOAMP en cours…</div>
-  <div style="font-size:12px;color:var(--mute)" id="loStep">Connexion au serveur…</div>
-  <div class="lo-bar"><div class="lo-fill" id="loFill"></div></div>
-</div>
-
-<div class="toast" id="toast"></div>
-
-<!-- MODAL -->
-<div class="mo" id="mo" onclick="closeOut(event)">
-<div class="modal">
-  <div class="m-hdr">
-    <div style="flex:1">
-      <div class="m-ref" id="mRef"></div>
-      <div class="m-titre" id="mT"></div>
-    </div>
-    <button class="m-close" onclick="closeModal()">✕</button>
-  </div>
-  <div class="info-grid" id="mInfos"></div>
-  <div class="sc-sec" id="mSc"></div>
-  <div class="ia-modal">
-    <div class="ia-m-hdr">
-      <div class="ia-m-lbl">✨ Analyse IA du marché</div>
-      <button class="btn-ia" id="btnIA" onclick="iaModal()">Analyser</button>
-    </div>
-    <div id="mIATxt" style="min-height:40px"><em style="font-size:12px;color:var(--mute)">Cliquez sur Analyser pour un résumé expert du marché.</em></div>
-  </div>
-  <div class="m-acts">
-    <a id="mLien" href="#" target="_blank" class="btn-dos">📄 Voir l'annonce sur BOAMP</a>
-    <button id="btnSv" class="btn-sauv" onclick="toggleSvModal()">💾 Sauvegarder</button>
-  </div>
-</div>
-</div>
-
-<!-- HEADER -->
-<header class="header">
-  <div class="logo">Marchés<span>Atelier</span><sub>CTS Hervé</sub></div>
-  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-    <span id="lastUpd" style="font-size:11px;color:var(--mute);display:none"></span>
-    <div class="badge-live"><div class="dot"></div>BOAMP Officiel</div>
-    <button class="btn-hdr" onclick="exportCSV()">📥 Export CSV</button>
-  </div>
-</header>
-
-<div class="tabs">
-  <button class="tab active" onclick="setTab('r',this)">🔍 Recherche</button>
-  <button class="tab" onclick="setTab('s',this)">💾 Sauvegardés <span class="tab-badge" id="svBadge" style="display:none">0</span></button>
-  <button class="tab" onclick="setTab('c',this)">⚙️ Paramètres</button>
-</div>
-
-<!-- RECHERCHE -->
-<div class="panel active" id="panel-r">
-<div class="container">
-
-  <div class="erreur-serveur" id="errServeur">
-    ⚠️ Impossible de contacter le serveur. Vérifiez votre connexion.
-  </div>
-
-  <div class="compteurs" id="cpts" style="display:none">
-    <div class="cpt" style="border-color:rgba(34,211,122,.35)">
-      <div class="cpt-l">🟢 Compatibles</div>
-      <div class="cpt-v" id="cG" style="color:var(--vert)">0</div>
-    </div>
-    <div class="cpt" style="border-color:rgba(245,166,35,.35)">
-      <div class="cpt-l">🟠 À étudier</div>
-      <div class="cpt-v" id="cO" style="color:var(--orange)">0</div>
-    </div>
-    <div class="cpt" style="border-color:rgba(232,68,90,.35)">
-      <div class="cpt-l">🔴 Peu compatibles</div>
-      <div class="cpt-v" id="cR" style="color:var(--rouge)">0</div>
-    </div>
-  </div>
-
-  <button class="btn-chercher" id="btnC" onclick="lancer()">↻ &nbsp;Chercher maintenant</button>
-
-  <div id="fWrap" style="display:none">
-    <div class="filtres">
-      <button class="fbtn active" onclick="setF('tous',this)">Tous</button>
-      <button class="fbtn" onclick="setF('vert',this)">🟢 Compatibles</button>
-      <button class="fbtn" onclick="setF('orange',this)">🟠 À étudier</button>
-      <button class="fbtn" onclick="setF('rouge',this)">🔴 Éviter</button>
-    </div>
-    <div class="filtres" id="triFiltres">
-      <span style="font-size:11px;color:var(--mute);padding:7px 4px">Trier par :</span>
-      <button class="fbtn active" id="triD" onclick="setTri('distance',this)">📏 Distance</button>
-      <button class="fbtn" id="triS" onclick="setTri('score',this)">🎯 Score</button>
-      <button class="fbtn" id="triP" onclick="setTri('date',this)">📅 Date</button>
-    </div>
-    <div class="search-box">
-      <input type="text" id="si" placeholder="Filtrer par ville, acheteur, type de marché…" oninput="render()">
-    </div>
-  </div>
-
-  <div id="liste">
-    <div class="vide">
-      <div class="vide-ico">🔍</div>
-      <div style="font-size:14px;margin-bottom:6px">Appuyez sur <strong style="color:var(--vert)">Chercher maintenant</strong></div>
-      <div style="font-size:12px">Les vraies annonces BOAMP compatibles apparaîtront ici</div>
-    </div>
-  </div>
-
-</div>
-</div>
-
-<!-- SAUVEGARDES -->
-<div class="panel" id="panel-s">
-<div class="container">
-  <div class="exp-bar">
-    <div style="font-size:13px;color:var(--txt)"><strong style="color:var(--vert)" id="svLbl">0</strong> marché sauvegardé</div>
-    <button class="btn-exp" onclick="exportCSV()">📥 Exporter CSV</button>
-  </div>
-  <div id="svListe">
-    <div class="vide"><div class="vide-ico">💾</div><p>Aucun marché sauvegardé.<br>Utilisez 💾 sur les marchés.</p></div>
-  </div>
-</div>
-</div>
-
-<!-- CONFIG -->
-<div class="panel" id="panel-c">
-<div class="container" style="max-width:560px">
-  <div class="cfg-card">
-    <div class="cfg-t">📍 Département de votre atelier</div>
-    <p style="font-size:12px;color:var(--mute);margin-bottom:10px">Sert à calculer les distances depuis votre atelier.</p>
-    <select class="cfg-sel" id="cfgDept" onchange="saveDept()">
-      <option value="02">02 — Aisne</option>
-      <option value="08">08 — Ardennes</option>
-      <option value="10">10 — Aube</option>
-      <option value="51" selected>51 — Marne</option>
-      <option value="52">52 — Haute-Marne</option>
-      <option value="54">54 — Meurthe-et-Moselle</option>
-      <option value="55">55 — Meuse</option>
-      <option value="57">57 — Moselle</option>
-      <option value="59">59 — Nord</option>
-      <option value="60">60 — Oise</option>
-      <option value="67">67 — Bas-Rhin</option>
-      <option value="75">75 — Paris</option>
-      <option value="77">77 — Seine-et-Marne</option>
-      <option value="80">80 — Somme</option>
-      <option value="88">88 — Vosges</option>
-    </select>
-  </div>
-  <div class="cfg-card">
-    <div class="cfg-t">🔌 Adresse du serveur</div>
-    <p style="font-size:12px;color:var(--mute);margin-bottom:10px">Renseignée automatiquement après déploiement sur Render.</p>
-    <input type="text" id="cfgServeur" placeholder="https://cts-herve.onrender.com"
-      style="width:100%;background:var(--surf2);border:1px solid var(--bord);border-radius:8px;padding:10px 12px;color:var(--txt);font-family:'DM Sans',sans-serif;font-size:13px;outline:none"
-      onchange="saveServeur()">
-    <button onclick="testerServeur()" style="margin-top:9px;background:var(--vert);border:none;border-radius:8px;padding:8px 16px;color:#0f1117;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;cursor:pointer">Tester la connexion</button>
-    <div id="testResult" style="margin-top:8px;font-size:12px"></div>
-  </div>
-  <div class="cfg-card">
-    <div class="cfg-t">🔑 Mots-clés surveillés</div>
-    <div class="kw-wrap" id="kwI"></div>
-    <div style="display:flex;gap:7px;margin-top:10px">
-      <input id="kwInput" class="cfg-sel" style="flex:1" placeholder="Ajouter un mot-clé..." onkeydown="if(event.key==='Enter')addKw()">
-      <button onclick="addKw()" style="background:var(--vert);border:none;border-radius:8px;padding:9px 14px;color:#0f1117;font-weight:700;cursor:pointer;font-size:13px">+</button>
-    </div>
-    <button onclick="resetKw()" style="margin-top:8px;background:transparent;border:1px solid var(--bord);border-radius:7px;padding:6px 12px;color:var(--mute);font-size:11px;cursor:pointer">↺ Réinitialiser les mots-clés par défaut</button>
-  </div>
-</div>
-</div>
-
-<script>
-const KW_M = ["sablage","grenaillage","traitement de surface","peinture industrielle","anticorrosion","époxy","polyuréthane","métallisation","thermolaquage","remise en peinture","garde-corps","candélabre","lampadaire","mobilier urbain","barrière métallique","serrurerie métallique","portail acier","charpente métallique","passerelle acier","ouvrages métalliques","zinc silicate"];
-
-function getKW(){
-  const stored=localStorage.getItem("cts_kw");
-  return stored?JSON.parse(stored):KW_M;
-}
-function saveKW(kws){
-  localStorage.setItem("cts_kw",JSON.stringify(kws));
-  renderKW();
-}
-function addKw(){
-  const inp=document.getElementById("kwInput");
-  const val=inp.value.trim().toLowerCase();
-  if(!val)return;
-  const kws=getKW();
-  if(!kws.includes(val)){kws.push(val);saveKW(kws);}
-  inp.value="";
-}
-function removeKw(k){
-  const kws=getKW().filter(x=>x!==k);
-  saveKW(kws);
-}
-function resetKw(){
-  localStorage.removeItem("cts_kw");
-  renderKW();
-}
-function renderKW(){
-  const ki=document.getElementById("kwI");
-  if(!ki)return;
-  ki.innerHTML=getKW().map(k=>`<span class="kw" style="background:rgba(34,211,122,.11);border:1px solid rgba(34,211,122,.3);color:var(--vert);cursor:pointer" title="Cliquer pour supprimer" onclick="removeKw('${k.replace(/'/g,"\'")}')">✓ ${k} ×</span>`).join(" ");
+function nrm(s){
+  return (s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 }
 
-
-let marches=[], saved=JSON.parse(localStorage.getItem("cts_sv")||"[]"), triActuel="distance";
-let filtre="tous", mIdx=null, toastT;
-
-function getServeur(){return localStorage.getItem("cts_srv")||"";}
-function getDept(){return document.getElementById("cfgDept")?.value||localStorage.getItem("cts_dept")||"51";}
-function nrm(s){return(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");}
-function cHex(c){return c==="vert"?"#22d37a":c==="orange"?"#f5a623":"#e8445a";}
-function cDim(c){return c==="vert"?"rgba(34,211,122,.12)":c==="orange"?"rgba(245,166,35,.12)":"rgba(232,68,90,.12)";}
-const lblC={vert:"🟢 Compatible",orange:"🟠 À étudier",rouge:"🔴 Peu compatible"};
-
-function showToast(txt){
-  const t=document.getElementById("toast");
-  t.textContent=txt;t.classList.add("show");
-  clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove("show"),3200);
-}
-function prog(p,t){
-  document.getElementById("loFill").style.width=p+"%";
-  document.getElementById("loStep").textContent=t;
+function estDist(dept, ref="51"){
+  if(!dept) return 400;
+  const d = dept.toString().padStart(2,"0").substring(0,2);
+  if(d===ref) return 15;
+  return DIST51[d]||350;
 }
 
-// ── FETCH SERVEUR ──
-async function lancer(){
-  const srv=getServeur();
-  if(!srv){
-    showToast("⚠️ Configurez d'abord l'adresse du serveur dans Paramètres");
-    setTab('c',document.querySelectorAll('.tab')[2]);
-    return;
-  }
-  const btn=document.getElementById("btnC");
-  btn.disabled=true;btn.textContent="Recherche…";
-  document.getElementById("lo").classList.add("show");
-  document.getElementById("errServeur").style.display="none";
-  prog(10,"Connexion au serveur…");
+function calculScore(m, kwRecherche){
+  let s=0, det=[];
+  const tx = nrm([m.titre, m.description, m.acheteur].join(" "));
 
+  // Correspondance métier en premier (max 35)
+  let kc=0;
+  for(const k of kwRecherche){ if(tx.includes(nrm(k))) kc++; }
+  let kp=Math.min(35,kc*6);
+  det.push({l:`Correspondance métier (${kc}/${kwRecherche.length})`,p:kp,mx:35});
+  s+=kp;
+
+  // Compatible atelier (max 25)
+  let ap=8;
+  for(const k of KW_ATELIER){ if(tx.includes(nrm(k))){ ap=25; break; } }
+  det.push({l:"Compatible atelier",p:ap,mx:25});
+  s+=ap;
+
+  // Distance (max 25)
+  const d=m.distance||400;
+  let dp=d<50?25:d<100?20:d<150?15:d<250?10:d<350?5:2;
+  det.push({l:`Distance (${d} km)`,p:dp,mx:25});
+  s+=dp;
+
+  // Pénalité
+  for(const k of KW_EXCLUS){ if(tx.includes(nrm(k))){ s=Math.max(0,s-25); break; } }
+
+  return {total:Math.min(100,Math.round(s)),det};
+}
+
+function couleur(sc){ return sc>=55?"vert":sc>=35?"orange":"rouge"; }
+
+function typeAtelier(tx){
+  for(const k of KW_ATELIER){ if(nrm(tx).includes(nrm(k))) return "✓ Pièces atelier"; }
+  return "? À vérifier";
+}
+
+async function fetchBOAMP(keywords){
+  const where = keywords.slice(0,5).map(k=>`search(objet,"${k.replace(/"/g,'')}")`).join(' OR ');
+  const url = `https://boamp-datadila.opendatasoft.com/api/explore/v2.1/catalog/datasets/boamp/records?where=${encodeURIComponent(where)}&limit=25&order_by=dateparution%20desc`;
   try{
-    prog(30,"Recherche sur BOAMP…");
-    const dept=getDept();
-    const res=await fetch(`${srv}/api/marches?dept=${dept}`,{signal:AbortSignal.timeout(60000)});
-    if(!res.ok)throw new Error("Serveur indisponible");
-    prog(80,"Traitement des résultats…");
-    const data=await res.json();
-    marches=data.marches||[];
-    prog(98,"Affichage…");
-    await new Promise(r=>setTimeout(r,200));
-    render();
-    document.getElementById("cpts").style.display="grid";
-    document.getElementById("fWrap").style.display="block";
-    document.getElementById("cG").textContent=marches.filter(m=>m.couleur==="vert").length;
-    document.getElementById("cO").textContent=marches.filter(m=>m.couleur==="orange").length;
-    document.getElementById("cR").textContent=marches.filter(m=>m.couleur==="rouge").length;
-    const lu=document.getElementById("lastUpd");
-    lu.textContent="↺ "+new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
-    lu.style.display="inline";
-    showToast("✓ "+marches.length+" annonces BOAMP trouvées");
-  }catch(e){
-    document.getElementById("errServeur").style.display="block";
-    showToast("⚠️ Impossible de contacter le serveur");
-  }
-
-  document.getElementById("lo").classList.remove("show");
-  btn.disabled=false;btn.textContent="↻  Chercher maintenant";
+    const res = await fetch(url,{headers:{'Accept':'application/json'},signal:AbortSignal.timeout(15000)});
+    if(!res.ok){ console.error(`BOAMP ${res.status}`); return []; }
+    const data = await res.json();
+    const records = data?.results||[];
+    return records.map(r=>{
+      const idweb=r.idweb||"";
+      const dept=(r.code_departement||r.code_departement_prestation||"").toString().padStart(2,"0").substring(0,2);
+      const dateLimit=r.datelimitereponse||"";
+      const datePub=r.dateparution||"";
+      const daysLeft=dateLimit?Math.round((new Date(dateLimit)-Date.now())/86400000):null;
+      return {
+        id:idweb||Math.random().toString(36).substring(2),
+        reference:idweb,
+        titre:r.objet||"Sans titre",
+        description:[r.objet||"",r.descripteur_libelle||"",r.famille_libelle||""].join(" "),
+        acheteur:r.nomacheteur||"Acheteur public",
+        ville:r.perimetre||"",
+        dept,
+        montant:parseFloat(r.montant||0)||null,
+        datePublication:datePub,
+        dateLimit,
+        daysLeft,
+        urlDirecte:r.url_avis||(idweb?`https://www.boamp.fr/avis/detail/${idweb}`:"https://www.boamp.fr"),
+        source:"BOAMP"
+      };
+    });
+  }catch(e){ console.error("BOAMP:",e.message); return []; }
 }
 
-// ── RENDER ──
-function render(){
-  const liste=document.getElementById("liste");
-  const search=nrm(document.getElementById("si")?.value||"");
-  const data=marches.filter(m=>{
-    if(filtre==="vert"&&m.couleur!=="vert")return false;
-    if(filtre==="orange"&&m.couleur!=="orange")return false;
-    if(filtre==="rouge"&&m.couleur!=="rouge")return false;
-    if(search&&!nrm(m.titre+m.ville+m.acheteur).includes(search))return false;
-    return true;
+app.get('/api/marches', async (req,res)=>{
+  const dept=req.query.dept||"51";
+  const tri=req.query.tri||"score";
+  const kwParam=req.query.kw||"";
+  const kwRecherche=kwParam
+    ? kwParam.split(",").map(k=>k.trim()).filter(Boolean)
+    : ["sablage","grenaillage","peinture industrielle","anticorrosion",
+       "traitement de surface","thermolaquage","metallisation",
+       "garde-corps","candelabre","serrurerie acier"];
+
+  console.log(`Recherche dept:${dept} kw:${kwRecherche.join(",")}`);
+
+  let tous=[];
+  for(let i=0;i<kwRecherche.length;i+=5){
+    const chunk=kwRecherche.slice(i,i+5);
+    const r=await fetchBOAMP(chunk);
+    tous.push(...r);
+    if(i+5<kwRecherche.length) await new Promise(r=>setTimeout(r,300));
+  }
+
+  const seen=new Set();
+  tous=tous.filter(m=>{ if(seen.has(m.id)) return false; seen.add(m.id); return true; });
+  tous=tous.filter(m=>m.daysLeft===null||m.daysLeft>0);
+  tous=tous.map(m=>{
+    m.distance=estDist(m.dept,dept);
+    const sc=calculScore(m,kwRecherche);
+    m.score=sc.total; m.scoreDetails=sc.det;
+    m.couleur=couleur(m.score);
+    m.typeAtelier=typeAtelier(m.description);
+    return m;
   });
-  if(!data.length){
-    liste.innerHTML='<div class="vide"><div class="vide-ico">😕</div><p>Aucun marché pour ce filtre.</p></div>';
-    return;
-  }
-  liste.innerHTML=data.map((m,i)=>{
-    const idx=marches.indexOf(m);
-    const c=cHex(m.couleur),cd=cDim(m.couleur);
-    const mt=m.montant?m.montant.toLocaleString("fr-FR")+" €":"Prix non communiqué";
-    const jours=m.daysLeft!=null?(m.daysLeft>0?m.daysLeft+" j restants":"EXPIRÉ"):"Délai ?";
-    const datePub=m.datePublication?new Date(m.datePublication).toLocaleDateString("fr-FR"):"?";
-    const sv=isSv(m.id);
-    return`<div class="carte" style="border-left-color:${c};animation-delay:${i*.04}s">
-      ${m.reference?`<div class="c-ref">Réf. ${m.reference}</div>`:""}
-      <div class="c-titre">${m.titre}</div>
-      <div class="chips">
-        <span class="chip">🏢 ${m.acheteur.length>26?m.acheteur.slice(0,25)+"…":m.acheteur}</span>
-        <span class="chip">📍 ${m.ville||"—"} (${m.dept||"?"})</span>
-        <span class="chip">📏 ${m.dept?"~"+m.distance+" km":"dist. ??"}</span>
-        <span class="chip">💰 ${mt}</span>
-        <span class="chip ${m.daysLeft!=null&&m.daysLeft<14?"o":""}">⏰ ${jours}</span>
-        <span class="chip">📅 Publié le ${datePub}</span>
-        <span class="chip ${m.typeAtelier==="✓ Pièces atelier"?"v":m.typeAtelier==="✗ Sur site"?"r":""}">${m.typeAtelier||"? À vérifier"}</span>
-      </div>
-      <div class="c-bottom">
-        <div style="display:flex;align-items:center;gap:9px">
-          <div class="score-box" style="background:${cd};border-color:${c}40">
-            <span class="score-num" style="color:${c}">${m.score}</span>
-            <span style="font-size:10px;color:var(--mute)">/100</span>
-          </div>
-          <span style="font-size:12px;font-weight:600;color:${c}">${lblC[m.couleur]}</span>
-        </div>
-        <div class="c-btns">
-          <button class="btn-rond" style="border-color:${sv?"var(--vert)":"var(--bord)"};color:${sv?"#0f1117":"var(--mute)"};background:${sv?"var(--vert)":"transparent"}" onclick="toggleSv(${idx})">${sv?"✓":"💾"}</button>
-          <button class="btn-voir" onclick="openModal(${idx})">Voir ➜</button>
-        </div>
-      </div>
-      ${m.aiSummary?`<div class="ia-inline"><div class="ia-lbl">✨ Analyse IA</div>${m.aiSummary.split("\n").filter(l=>l.trim()).map(l=>`<div class="ia-ligne">${l}</div>`).join("")}</div>`:""}
-    </div>`;
-  }).join("");
-}
 
-// ── IA ──
-async function iaModal(){
-  if(mIdx===null)return;
-  const m=marches[mIdx];
-  const srv=getServeur();
-  if(!srv){showToast("⚠️ Serveur non configuré");return;}
-  const btn=document.getElementById("btnIA");
-  const div=document.getElementById("mIATxt");
-  btn.disabled=true;btn.textContent="Analyse…";
-  div.innerHTML='<div class="ia-load"><div class="sp-sm"></div> Analyse en cours…</div>';
-  try{
-    const res=await fetch(`${srv}/api/analyser`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({marche:m}),
-      signal:AbortSignal.timeout(30000)
-    });
-    const data=await res.json();
-    if(!data.success)throw new Error(data.error||"Erreur");
-    marches[mIdx].aiSummary=data.resume;
-    div.innerHTML=data.resume.split("\n").filter(l=>l.trim()).map(l=>`<div style="font-size:13px;color:var(--txt);line-height:1.75;margin-bottom:6px">${l}</div>`).join("");
-    btn.textContent="🔄 Re-analyser";btn.disabled=false;
-    showToast("✨ Analyse prête");
-    setTimeout(()=>{const mo=document.querySelector(".modal");if(mo)mo.scrollTop=mo.scrollHeight;},100);
-  }catch(e){
-    div.innerHTML='<em style="font-size:12px;color:var(--rouge)">Erreur. Vérifiez votre connexion.</em>';
-    btn.textContent="↻ Réessayer";btn.disabled=false;
-  }
-}
+  if(tri==="distance") tous.sort((a,b)=>a.distance-b.distance);
+  else if(tri==="date") tous.sort((a,b)=>new Date(b.datePublication)-new Date(a.datePublication));
+  else tous.sort((a,b)=>b.score-a.score);
 
-// ── MODAL ──
-function openModal(idx){
-  const m=marches[idx];if(!m)return;mIdx=idx;
-  const c=cHex(m.couleur);
-  if(m.reference)document.getElementById("mRef").textContent="Réf. "+m.reference;
-  else document.getElementById("mRef").textContent="";
-  document.getElementById("mT").textContent=m.titre;
-  document.getElementById("mLien").href=m.urlDirecte||m.url||"#";
-  const mt=m.montant?m.montant.toLocaleString("fr-FR")+" €":"Prix non communiqué — prévoir devis";
-  const dl=m.daysLeft!=null?(m.daysLeft>0?m.daysLeft+" jours restants":"⚠️ Délai expiré"):"Non précisé";
-  const datePub=m.datePublication?new Date(m.datePublication).toLocaleDateString("fr-FR"):"?";
-  document.getElementById("mInfos").innerHTML=[
-    ["🏢 Acheteur",m.acheteur||"—"],
-    ["📍 Lieu",(m.ville||"—")+" ("+m.dept+")"],
-    ["📏 Distance",m.distance+" km de l'atelier"],
-    ["📅 Publié le",datePub],
-    ["⏰ Délai réponse",dl],
-    ["💰 Montant",mt],
-    ["🔧 Type",m.typeAtelier||"? À vérifier"],
-    ["🎯 Score",m.score+"/100 — "+lblC[m.couleur]]
-  ].map(([k,v])=>`<div class="ib"><div class="ib-l">${k}</div><div class="ib-v" style="${k.includes("Score")?"color:"+c+";font-family:'Syne',sans-serif;font-size:17px;font-weight:800":""}">${v}</div></div>`).join("");
-
-  const scOrder = ["Correspondance métier","Compatible atelier","Distance","Temps pour répondre"];
-  const scDetails = (m.scoreDetails||[])
-    .filter(d=>!d.l.includes("Temps pour répondre"))
-    .sort((a,b)=>{
-      const ia=scOrder.findIndex(x=>a.l.includes(x));
-      const ib=scOrder.findIndex(x=>b.l.includes(x));
-      return (ia<0?99:ia)-(ib<0?99:ib);
-    });
-  document.getElementById("mSc").innerHTML=`<div class="sc-t">Détail du score</div>`+
-    scDetails.map(d=>`<div class="sc-row"><span class="sc-lbl">${d.l}</span><div class="sc-bar"><div class="sc-fill" style="width:${d.mx>0?Math.round(Math.max(0,d.p)/d.mx*100):0}%;background:${c}"></div></div><span class="sc-pts" style="color:${c}">${d.p}${d.mx>0?"/"+d.mx:""}</span></div>`).join("");
-
-  const div=document.getElementById("mIATxt");
-  const btn=document.getElementById("btnIA");
-  if(m.aiSummary){
-    div.innerHTML=m.aiSummary.split("\n").filter(l=>l.trim()).map(l=>`<div style="font-size:13px;color:var(--txt);line-height:1.75;margin-bottom:6px">${l}</div>`).join("");
-    btn.textContent="🔄 Re-analyser";
-  }else{
-    div.innerHTML='<em style="font-size:12px;color:var(--mute)">Cliquez sur Analyser pour un résumé expert.</em>';
-    btn.textContent="Analyser";
-  }
-  btn.disabled=false;
-  const sv=isSv(m.id);
-  const bs=document.getElementById("btnSv");
-  bs.textContent=sv?"✓ Sauvegardé":"💾 Sauvegarder";
-  bs.className="btn-sauv"+(sv?" saved":"");
-  document.getElementById("mo").classList.add("open");
-  history.pushState({modal:true},"");
-}
-function closeModal(){document.getElementById("mo").classList.remove("open");mIdx=null;}
-window.addEventListener("popstate",function(e){
-  if(document.getElementById("mo").classList.contains("open")){closeModal();}
+  console.log(`${tous.length} annonces trouvées`);
+  res.json({success:true,total:tous.length,marches:tous});
 });
-function closeOut(e){if(e.target===document.getElementById("mo"))closeModal();}
-function toggleSvModal(){
-  if(mIdx===null)return;
-  toggleSv(mIdx);
-  const sv=isSv(marches[mIdx].id);
-  const bs=document.getElementById("btnSv");
-  bs.textContent=sv?"✓ Sauvegardé":"💾 Sauvegarder";
-  bs.className="btn-sauv"+(sv?" saved":"");
-}
 
-// ── SAUVEGARDES ──
-function isSv(id){return saved.some(s=>s.id===id);}
-function toggleSv(idx){
-  const m=marches[idx];if(!m)return;
-  const i=saved.findIndex(s=>s.id===m.id);
-  if(i>=0){saved.splice(i,1);showToast("Retiré");}
-  else{saved.push({...m,savedAt:new Date().toISOString()});showToast("💾 Sauvegardé !");}
-  localStorage.setItem("cts_sv",JSON.stringify(saved));
-  updSv();render();
-}
-function updSv(){
-  const n=saved.length;
-  document.getElementById("svBadge").textContent=n;
-  document.getElementById("svBadge").style.display=n?"inline":"none";
-  document.getElementById("svLbl").textContent=n;
-}
-function renderSv(){
-  const div=document.getElementById("svListe");
-  if(!saved.length){div.innerHTML='<div class="vide"><div class="vide-ico">💾</div><p>Aucun marché sauvegardé.</p></div>';return;}
-  div.innerHTML=saved.map((m,i)=>{
-    const c=cHex(m.couleur);
-    const mt=m.montant?m.montant.toLocaleString("fr-FR")+" €":"Prix non communiqué";
-    return`<div class="sv-card" style="border-left-color:${c}">
-      ${m.reference?`<div style="font-size:10px;color:var(--mute);margin-bottom:4px">Réf. ${m.reference}</div>`:""}
-      <div class="sv-titre">${m.titre}</div>
-      <div class="chips">
-        <span class="chip">📍 ${m.ville||"—"} (${m.dept||"?"})</span>
-        <span class="chip">📏 ${m.dept?"~"+m.distance+" km":"dist. ??"}</span>
-        <span class="chip">💰 ${mt}</span>
-        <span class="chip" style="color:${c};border-color:${c}40">🎯 ${m.score}/100</span>
-        <span class="chip">⏰ ${m.daysLeft>0?m.daysLeft+"j":"Expiré"}</span>
-      </div>
-      ${m.aiSummary?`<div class="ia-inline"><div class="ia-lbl">✨ Analyse IA</div>${m.aiSummary.split("\n").filter(l=>l.trim()).map(l=>`<div class="ia-ligne">${l}</div>`).join("")}</div>`:""}
-      <div class="sv-acts">
-        <a href="${m.urlDirecte||m.url||"#"}" target="_blank" class="btn-link">📄 Voir sur BOAMP</a>
-        <button class="btn-del" onclick="delSv(${i})">🗑 Supprimer</button>
-      </div>
-    </div>`;
-  }).join("");
-}
-function delSv(i){saved.splice(i,1);localStorage.setItem("cts_sv",JSON.stringify(saved));updSv();renderSv();}
+app.post('/api/analyser', async (req,res)=>{
+  const {marche}=req.body;
+  const apiKey=process.env.ANTHROPIC_API_KEY;
+  if(!apiKey) return res.status(500).json({error:"Clé API manquante"});
+  if(!marche) return res.status(400).json({error:"Données manquantes"});
 
-// ── EXPORT ──
-function exportCSV(){
-  const data=saved.length?saved:marches;
-  if(!data.length){showToast("⚠️ Lancez d'abord une recherche");return;}
-  const h=["Référence","Titre","Acheteur","Ville","Dept","Distance km","Montant €","Score","Compatibilité","Date publication","Jours restants","URL directe","Analyse IA"];
-  const rows=data.map(m=>[
-    m.reference||"",
-    `"${(m.titre||"").replace(/"/g,'""')}"`,
-    `"${(m.acheteur||"").replace(/"/g,'""')}"`,
-    m.ville||"",m.dept||"",m.distance||"",m.montant||"",m.score||0,
-    lblC[m.couleur]||"",
-    m.datePublication?new Date(m.datePublication).toLocaleDateString("fr-FR"):"",
-    m.daysLeft!=null?m.daysLeft:"",
-    m.urlDirecte||m.url||"",
-    `"${(m.aiSummary||"").replace(/"/g,'""').replace(/\n/g," ")}"`
-  ]);
-  const csv=[h.join(";"),...rows.map(r=>r.join(";"))].join("\n");
-  const a=document.createElement("a");
-  a.href=URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}));
-  a.download="marches_cts_"+new Date().toISOString().split("T")[0]+".csv";
-  a.click();showToast("✓ Fichier exporté");
-}
+  const montantTxt=marche.montant?Math.round(marche.montant).toLocaleString('fr-FR')+" €":"non communiqué";
+  const prompt=`Résume ce marché public en 4 lignes pour un artisan spécialisé en sablage et peinture industrielle.
 
-// ── CONFIG ──
-function saveDept(){localStorage.setItem("cts_dept",document.getElementById("cfgDept").value);showToast("✓ Enregistré");}
-function saveServeur(){localStorage.setItem("cts_srv",document.getElementById("cfgServeur").value.trim());showToast("✓ Adresse enregistrée");}
+TITRE : ${marche.titre}
+ACHETEUR : ${marche.acheteur}
+LIEU : dept ${marche.dept||"?"} — ${marche.distance} km de l'atelier
+BUDGET : ${montantTxt}
+DÉLAI : ${marche.daysLeft?marche.daysLeft+" jours":"?"}
+DESCRIPTION : ${marche.description.slice(0,600)}
 
-async function testerServeur(){
-  const srv=document.getElementById("cfgServeur").value.trim();
-  const res=document.getElementById("testResult");
-  if(!srv){res.textContent="⚠️ Entrez d'abord l'adresse";res.style.color="var(--rouge)";return;}
-  res.textContent="Test en cours…";res.style.color="var(--mute)";
+Réponds EXACTEMENT avec ces 4 lignes :
+🔧 Travaux : (décris ce qu'il faut faire)
+📦 Matériaux : (pièces métalliques, garde-corps, etc.)
+💰 Budget : (montant ou estimation)
+✅ Verdict : Compatible / Peu compatible / À éviter — (raison courte)`;
+
   try{
-    const r=await fetch(`${srv}/api/ping`,{signal:AbortSignal.timeout(8000)});
-    const d=await r.json();
-    res.textContent="✅ Serveur connecté — "+d.message;res.style.color="var(--vert)";
-  }catch{
-    res.textContent="❌ Impossible de contacter le serveur";res.style.color="var(--rouge)";
+    const r=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":apiKey,"anthropic-version":"2023-06-01"},
+      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:300,messages:[{role:"user",content:prompt}]})
+    });
+    const data=await r.json();
+    if(data.error) throw new Error(data.error.message);
+    const texte=data.content?.map(b=>b.text||"").join("\n").trim()||"";
+    res.json({success:true,resume:texte});
+  }catch(e){
+    console.error("IA:",e.message);
+    res.status(500).json({error:"Erreur: "+e.message});
   }
-}
+});
 
-function setTab(id,btn){
-  document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
-  document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active"));
-  document.getElementById("panel-"+id).classList.add("active");
-  btn.classList.add("active");
-  if(id==="s")renderSv();
-  if(id==="c")renderCfg();
-}
-function setTri(t,btn){
-  triActuel=t;
-  document.querySelectorAll("#triFiltres .fbtn").forEach(b=>b.classList.remove("active"));
-  btn.classList.add("active");
-  // Re-trier localement
-  if(t==="distance") marches.sort((a,b)=>a.distance-b.distance);
-  else if(t==="score") marches.sort((a,b)=>b.score-a.score);
-  else marches.sort((a,b)=>{
-    if(a.datePublication&&b.datePublication) return new Date(b.datePublication)-new Date(a.datePublication);
-    return b.score-a.score;
-  });
-  render();
-}
-function setF(f,btn){
-  filtre=f;
-  document.querySelectorAll(".fbtn").forEach(b=>b.classList.remove("active"));
-  btn.classList.add("active");render();
-}
-function renderCfg(){
-  const ki=document.getElementById("kwI");
-  renderKW();
-  const srv=localStorage.getItem("cts_srv")||"";
-  if(srv)document.getElementById("cfgServeur").value=srv;
-  const dept=localStorage.getItem("cts_dept")||"51";
-  const sel=document.getElementById("cfgDept");
-  if(sel)sel.value=dept;
-}
+app.get('/api/ping',(req,res)=>res.json({status:"ok",message:"Serveur CTS Hervé actif"}));
 
-(function(){
-  updSv();
-  document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();});
-})();
-</script>
-</body>
-</html>
+app.listen(PORT,()=>console.log(`Serveur CTS Hervé port ${PORT}`));
