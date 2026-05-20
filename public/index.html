@@ -290,7 +290,7 @@ function renderKwQuick(){
   const el=document.getElementById("kwQuick");
   if(!el)return;
   const kws=getKW();
-  el.innerHTML=kws.map(k=>`<span style="font-size:11px;padding:2px 7px;border-radius:12px;background:var(--vert-light);border:1px solid #86efac;color:var(--vert)">${k}</span>`).join("");
+  el.innerHTML=kws.map(k=>`<span style="font-size:11px;padding:2px 7px;border-radius:12px;background:var(--vert-light);border:1px solid #86efac;color:var(--vert);cursor:pointer;display:inline-flex;align-items:center;gap:3px" onclick="removeKw('${k.replace(/'/g,"\'")}');renderKwQuick()" title="Supprimer">${k} <span style="font-size:10px;opacity:.6">×</span></span>`).join("");
 }
 function highlightKW(txt){
   const kws=getKW();
@@ -474,7 +474,7 @@ function openModal(idx){
   bs.textContent=sv?"✓ Sauvegardé":"💾 Sauvegarder";
   bs.className="btn-sauv"+(sv?" saved":"");
   document.getElementById("mo").classList.add("open");
-  history.pushState({modal:true},"");
+  history.pushState({modal:true},"","#modal");
 }
 
 function closeModal(){
@@ -482,12 +482,11 @@ function closeModal(){
   mIdx=null;
 }
 function closeOut(e){if(e.target===document.getElementById("mo"))closeModal();}
-window.addEventListener("popstate",function(e){
-  if(document.getElementById("mo").classList.contains("open")){
-    e.preventDefault();
-    closeModal();
-    return false;
-  }
+window.addEventListener("popstate",function(){
+  closeModal();
+});
+document.addEventListener("keydown",function(e){
+  if(e.key==="Escape") closeModal();
 });
 
 // ── IA ──
