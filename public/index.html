@@ -482,8 +482,14 @@ function closeModal(){
   mIdx=null;
 }
 function closeOut(e){if(e.target===document.getElementById("mo"))closeModal();}
-window.addEventListener("popstate",function(){
-  closeModal();
+// Empêcher le retour arrière de quitter le site
+history.pushState(null, "", window.location.href);
+window.addEventListener("popstate", function() {
+  if(document.getElementById("mo").classList.contains("open")){
+    closeModal();
+  }
+  // Repousser l'état pour bloquer le retour
+  history.pushState(null, "", window.location.href);
 });
 document.addEventListener("keydown",function(e){
   if(e.key==="Escape") closeModal();
