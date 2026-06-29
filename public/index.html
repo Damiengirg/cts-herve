@@ -125,6 +125,9 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;min-
 .vide{text-align:center;padding:40px 20px;color:var(--mute)}
 .sp{width:20px;height:20px;border:2.5px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
 .sp-v{width:18px;height:18px;border:2.5px solid rgba(124,58,237,.2);border-top-color:var(--violet);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+
+.srv-wake{background:#fef3c7;border:1px solid #fcd34d;border-radius:8px;padding:8px 12px;font-size:12px;color:#92400e;margin-bottom:10px;display:none;align-items:center;gap:7px}
+.srv-wake.show{display:flex}
 </style>
 </head>
 <body>
@@ -146,6 +149,12 @@ body{background:var(--bg);color:var(--txt);font-family:'DM Sans',sans-serif;min-
 <!-- RECHERCHE -->
 <div class="container">
 <div class="panel active" id="panR">
+
+  <div class="srv-wake" id="srvWake">
+    <span class="sp-v"></span>
+    <span id="srvWakeTxt">Réveil du serveur en cours… (jusqu'à 60s)</span>
+  </div>
+
   <div class="compteurs">
     <div class="cpt" style="border-color:#86efac">
       <div class="cpt-l">🟢 Compatibles</div>
@@ -290,10 +299,23 @@ const KW_DEFAULT = ["sablage","grenaillage","peinture industrielle","anticorrosi
 let marches=[], saved=JSON.parse(localStorage.getItem("cts_sv")||"[]");
 let filtre="tous", tri="score", mIdx=null, toastT;
 
-// ── UTILS ──
-function goBack(){
-  setTab('r', document.getElementById('tabR'));
+// ── WAKE UP SERVEUR AU CHARGEMENT ──
+async function wakeServer(){
+  const srv=getSrv();
+  const banner=document.getElementById("srvWake");
+  const txt=document.getElementById("srvWakeTxt");
+  try{
+    banner.classList.add("show");
+    txt.textContent="Réveil du serveur en cours… (jusqu'à 60s)";
+    await fetch(`${srv}/api/ping`,{signal:AbortSignal.timeout(90000)});
+    banner.classList.remove("show");
+  }catch(e){
+    txt.textContent="⚠️ Serveur non joignable — vérifiez Paramètres";
+  }
 }
+
+// ── UTILS ──
+function goBack(){setTab('r', document.getElementById('tabR'));}
 function quickDept(v){
   localStorage.setItem("cts_dept",v);
   const cfgDept=document.getElementById("cfgDept");
@@ -304,7 +326,7 @@ function renderKwQuick(){
   const el=document.getElementById("kwQuick");
   if(!el)return;
   const kws=getKW();
-  el.innerHTML=kws.map(k=>`<span style="font-size:11px;padding:2px 7px;border-radius:12px;background:var(--vert-light);border:1px solid #86efac;color:var(--vert);cursor:pointer;display:inline-flex;align-items:center;gap:3px" onclick="removeKw('${k.replace(/'/g,"\'")}');renderKwQuick()" title="Supprimer">${k} <span style="font-size:10px;opacity:.6">×</span></span>`).join("");
+  el.innerHTML=kws.map(k=>`<span style="font-size:11px;padding:2px 7px;border-radius:12px;background:var(--vert-light);border:1px solid #86efac;color:var(--vert);cursor:pointer;display:inline-flex;align-items:center;gap:3px" onclick="removeKw('${k.replace(/'/g,"\\'")}');renderKwQuick()" title="Supprimer">${k} <span style="font-size:10px;opacity:.6">×</span></span>`).join("");
 }
 function highlightKW(txt){
   const kws=getKW();
@@ -375,7 +397,7 @@ async function lancer(){
   const url=`${srv}/api/marches?dept=${dept}&tri=${tri}&kw=${encodeURIComponent(kw.join(","))}`;
 
   try{
-    const res=await fetch(url,{signal:AbortSignal.timeout(60000)});
+    const res=await fetch(url,{signal:AbortSignal.timeout(90000)});
     const data=await res.json();
     marches=data.marches||[];
     maj();render();
@@ -464,7 +486,6 @@ function openModal(idx){
     ["💰 Montant",mt],
   ].map(([k,v])=>`<div class="ib"><div class="ib-l">${k}</div><div class="ib-v">${v}</div></div>`).join("");
 
-  // Score : correspondance métier en 1er, sans "temps pour répondre"
   const scDetails=(m.scoreDetails||[]).filter(d=>!d.l.toLowerCase().includes("temps"));
   document.getElementById("mSc").innerHTML=`<div class="sc-t">Score : ${m.score} pts — ${lblC[m.couleur]}</div>`+
     scDetails.map(d=>`<div class="sc-row">
@@ -497,9 +518,7 @@ function closeModal(){
 }
 function closeOut(e){if(e.target===document.getElementById("mo"))closeModal();}
 window.addEventListener("popstate", function() {
-  if(document.getElementById("mo").classList.contains("open")){
-    closeModal();
-  }
+  if(document.getElementById("mo").classList.contains("open")) closeModal();
 });
 document.addEventListener("keydown",function(e){
   if(e.key==="Escape") closeModal();
@@ -641,6 +660,8 @@ document.addEventListener("DOMContentLoaded",()=>{
   renderKwQuick();
   const dq=document.getElementById("deptQuick");
   if(dq) dq.value=localStorage.getItem("cts_dept")||"51";
+  // Ping serveur au chargement pour le réveiller
+  wakeServer();
 });
 </script>
 </body>
