@@ -5,7 +5,7 @@ const fetch = (...args) => import('node-fetch').then(({default: f}) => f(...args
 const app = express();
 app.use(cors());
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static('publique'));
 const PORT = process.env.PORT || 3000;
 
 const DIST51 = {
@@ -45,13 +45,12 @@ function calculScore(m, kwRecherche){
   let s=0, det=[];
   const tx = nrm([m.titre, m.description, m.acheteur].join(" "));
 
-  // SCORE = 10 x nb_mots_clés dans le titre (doublé si 2, triplé si 3, etc.)
   const titreSeulement = nrm(m.titre);
   let kc=0, kwTrouves=[];
   for(const k of kwRecherche){
     if(titreSeulement.includes(nrm(k))){ kc++; kwTrouves.push(k); }
   }
-  const kp = kc * 10 * kc; // 1 mot=10, 2 mots=40, 3 mots=90, 4 mots=160 (plafonné)
+  const kp = kc * 10 * kc;
   det.push({l:`🔧 Mots-clés : ${kwTrouves.length>0?kwTrouves.join(", "):"aucun"}`,p:kp,mx:null});
   s+=kp;
 
@@ -59,8 +58,6 @@ function calculScore(m, kwRecherche){
 }
 
 function couleur(sc){
-  // 1 mot=10, 2 mots=40, 3 mots=90, 4 mots=160
-  // rouge=1 mot, orange=2-3 mots, vert=4+ mots
   return sc>=160?"vert":sc>=40?"orange":sc>=10?"rouge":"rouge";
 }
 
